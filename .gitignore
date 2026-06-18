@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+
+# Data & output (Volume-on van Railway-en)
+data/
+output/
+notebooks/
+
+# Frontend build artifacts
+frontend/node_modules/
+frontend/dist/
+
+# Tooling
+.claude/
+.DS_Store
+*.db
+*.db-shm
+*.db-wal

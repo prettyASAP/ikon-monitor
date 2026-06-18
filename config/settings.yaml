@@ -1,0 +1,41 @@
+# ikon-monitor konfigurációs fájl
+# Minden érdemi paraméter itt van – a kód nem tartalmaz hardcoded számokat.
+# A senior DS csapat itt hangolhatja a scoring logikát.
+
+scoring:
+  # Pontszám komponensek tier-enként
+  tier1_base_score: 40       # Pontos cégname/személynév egyezés
+  tier2_base_score: 20       # Rövidítés/közepes specificitású kulcsszó (valódi egyezés)
+  tier3_base_score: 5        # Iparági általános kifejezés
+  false_positive_penalty: 2          # Pontszám FP esetén (tier1)
+  tier2_false_positive_penalty: 5   # T2 FP → Zaj (< 8 review küszöb); detektált FP ne terhelje a reviewert
+
+  # Kontextus bónusz (médiaipari szavak a szövegben)
+  context_bonus_per_word: 2
+  context_bonus_cap: 15
+
+  # Bulvár forrás büntetése Tier 3 kulcsszavaknál
+  bulvar_tier3_penalty: 3
+
+  # Kategória küszöbök
+  thresholds:
+    relevant: 20    # score >= 20 → Releváns
+    review: 8       # score >= 8  → Felülvizsgálandó
+                    # score < 8   → Zaj
+
+scraping:
+  time_window_hours: 168    # 1 hét
+  request_delay_seconds: 1.2
+  request_timeout_seconds: 15
+  base_url: "https://www.hirkereso.hu/search"
+  user_agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
+
+storage:
+  db_path: "data/ikon.db"
+  feedback_path: "output/feedback.json"
+
+export:
+  output_dir: "output"
+  # Ha a pyarrow csomag telepítve van, Parquet is exportálódik a Jupyter notebookokhoz
+  export_parquet: true
+  excel_row_height: 60  # pt – olvasható sorok az Excelben
