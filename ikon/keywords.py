@@ -396,6 +396,24 @@ FULL_NAME_REQUIRED: frozenset[str] = frozenset({
 })
 
 # ---------------------------------------------------------------------------
+# IKO kombinált profil (iko_ceg + tv_radio_musorok + hten egybeolvasztva)
+# ---------------------------------------------------------------------------
+
+def _merge(*dicts: dict) -> dict:
+    """Három profil tier-jeit egyesíti, duplikátumok nélkül (sorrend megtartva)."""
+    merged: dict[str, list[str]] = {}
+    for d in dicts:
+        for tier, kws in d.items():
+            seen = set(merged.get(tier, []))
+            merged.setdefault(tier, []).extend(kw for kw in kws if kw not in seen)
+            seen.update(kws)
+    return merged
+
+IKO_COMBINED_KEYWORDS: dict[str, list[str]] = _merge(
+    KEYWORDS, TV_RADIO_KEYWORDS, HTEN_KEYWORDS
+)
+
+# ---------------------------------------------------------------------------
 # Gyors lookup táblák  (DS3: mind a négy profilt tartalmazza)
 # ---------------------------------------------------------------------------
 

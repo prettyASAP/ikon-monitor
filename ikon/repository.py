@@ -388,9 +388,10 @@ class KeywordRepository:
         hiányzó kulcsszavak (pl. újonnan hozzáadottak) automatikusan pótlódnak.
         Returns: összes beillesztett sor száma
         """
-        from ikon.keywords import KEYWORDS, TV_RADIO_KEYWORDS, HTEN_KEYWORDS, NAPI_KEYWORDS
+        from ikon.keywords import KEYWORDS, TV_RADIO_KEYWORDS, HTEN_KEYWORDS, NAPI_KEYWORDS, IKO_COMBINED_KEYWORDS
 
         profiles_data = [
+            ("iko",              IKO_COMBINED_KEYWORDS),
             ("iko_ceg",          KEYWORDS),
             ("tv_radio_musorok", TV_RADIO_KEYWORDS),
             ("hten",             HTEN_KEYWORDS),

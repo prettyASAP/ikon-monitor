@@ -75,7 +75,7 @@ export default function App() {
   const [newKwText, setNewKwText]             = useState('')
   const [newKwTier, setNewKwTier]             = useState('tier2_kozepes')
   const [timeWindow, setTimeWindow]           = useState(168)  // 168 = heti, 24 = napi
-  const [activeProfile, setActiveProfile]     = useState('iko_ceg')
+  const [activeProfile, setActiveProfile]     = useState('iko')
 
   const cancelSim   = useRef(null)
   const activeRunId = useRef(null)
@@ -314,10 +314,8 @@ export default function App() {
   const pdfArticles = [...relArticles, ...revApproved].sort((a, b) => b.score - a.score)
 
   const PROFILES = [
-    { id: 'iko_ceg',           label: 'IKO cég' },
-    { id: 'tv_radio_musorok',  label: 'TV, Rádió, Műsorok' },
-    { id: 'hten',              label: 'HTÉN' },
-    { id: 'napi',              label: 'NAPI' },
+    { id: 'iko',   label: 'IKO' },
+    { id: 'napi',  label: 'NAPI' },
   ]
 
   return (
