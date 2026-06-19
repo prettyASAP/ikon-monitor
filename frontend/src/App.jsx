@@ -339,22 +339,20 @@ export default function App() {
         {/* ── Hero ── */}
         <section className="hero">
           <div className="hero-top">
-            {activeProfile !== 'napi' && (
-              <div className="time-window-toggle">
-                <button
-                  className={`tw-btn${timeWindow === 168 ? ' tw-active' : ''}`}
-                  onClick={() => setTimeWindow(168)}
-                  disabled={running}
-                  title={allRuns.some(r => r.time_window_hours === 168) ? '' : 'Nincs heti futás – indíts egyet'}
-                >Heti</button>
-                <button
-                  className={`tw-btn${timeWindow === 24 ? ' tw-active' : ''}`}
-                  onClick={() => setTimeWindow(24)}
-                  disabled={running}
-                  title={allRuns.some(r => r.time_window_hours === 24) ? '' : 'Nincs napi futás – indíts egyet'}
-                >Napi</button>
-              </div>
-            )}
+            <div className="time-window-toggle">
+              <button
+                className={`tw-btn${timeWindow === 168 ? ' tw-active' : ''}`}
+                onClick={() => setTimeWindow(168)}
+                disabled={running || activeProfile === 'napi'}
+                title={activeProfile === 'napi' ? 'NAPI profil mindig 24 órás' : (allRuns.some(r => r.time_window_hours === 168) ? '' : 'Nincs heti futás – indíts egyet')}
+              >Heti</button>
+              <button
+                className={`tw-btn${timeWindow === 24 ? ' tw-active' : ''}`}
+                onClick={() => setTimeWindow(24)}
+                disabled={running}
+                title={allRuns.some(r => r.time_window_hours === 24) ? '' : 'Nincs napi futás – indíts egyet'}
+              >Napi</button>
+            </div>
             <button className="btn-run" onClick={triggerRun} disabled={running}>
               {running ? '⟳  Futás folyamatban…' : '▶  Futás indítása'}
             </button>
