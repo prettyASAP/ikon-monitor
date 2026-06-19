@@ -5,7 +5,13 @@ from __future__ import annotations
 
 import pytest
 
-from ikon.keywords import ALL_KEYWORDS
+from ikon.keywords import KEYWORDS, TV_RADIO_KEYWORDS, HTEN_KEYWORDS, NAPI_KEYWORDS, IKO_COMBINED_KEYWORDS
+
+_ALL_SEEDED = sum(
+    len(kws)
+    for d in [IKO_COMBINED_KEYWORDS, KEYWORDS, TV_RADIO_KEYWORDS, HTEN_KEYWORDS, NAPI_KEYWORDS]
+    for kws in d.values()
+)
 
 
 class TestListKeywords:
@@ -13,7 +19,7 @@ class TestListKeywords:
         resp = api_client.get("/api/v1/keywords")
         assert resp.status_code == 200
         data = resp.json()
-        assert len(data) == len(ALL_KEYWORDS)
+        assert len(data) == _ALL_SEEDED
         assert all("keyword" in kw and "tier" in kw and "is_active" in kw for kw in data)
 
     def test_filter_by_tier(self, api_client):
@@ -28,7 +34,7 @@ class TestListKeywords:
         resp = api_client.get("/api/v1/keywords?active_only=true")
         assert resp.status_code == 200
         data = resp.json()
-        assert len(data) == len(ALL_KEYWORDS)
+        assert len(data) == _ALL_SEEDED
 
 
 class TestCreateKeyword:

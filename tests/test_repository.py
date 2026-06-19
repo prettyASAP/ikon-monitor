@@ -10,7 +10,13 @@ import json
 
 import pytest
 
-from ikon.keywords import ALL_KEYWORDS
+from ikon.keywords import ALL_KEYWORDS, KEYWORDS, TV_RADIO_KEYWORDS, HTEN_KEYWORDS, NAPI_KEYWORDS, IKO_COMBINED_KEYWORDS
+
+_ALL_SEEDED = sum(
+    len(kws)
+    for d in [IKO_COMBINED_KEYWORDS, KEYWORDS, TV_RADIO_KEYWORDS, HTEN_KEYWORDS, NAPI_KEYWORDS]
+    for kws in d.values()
+)
 from ikon.repository import ArticleFilter, ArticleRepository, KeywordRepository, RunRepository
 
 from tests.conftest import insert_article, insert_run
@@ -27,7 +33,7 @@ class TestKeywordSeed:
         # v005 migration pre-seed-eli a 15 NAPI kulcsszót; seed_from_python
         # INSERT OR IGNORE-t használ, ezért a total DB count == len(ALL_KEYWORDS).
         total = db_conn.execute("SELECT COUNT(*) FROM keywords").fetchone()[0]
-        assert total == len(ALL_KEYWORDS)
+        assert total == _ALL_SEEDED
 
     def test_seed_is_idempotent(self, db_conn):
         repo = KeywordRepository(db_conn)
