@@ -93,8 +93,7 @@ def trigger_run(
     # 2. Konkurens futás + run létrehozás – egyetlen lépésben a UNIQUE index véd
     run_id = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
     keyword_profile = body.keyword_profile
-    # Napi profil: mindig 24 órás ablak
-    time_window = 24 if keyword_profile == "napi" else body.time_window_hours
+    time_window = body.time_window_hours
     model = PipelineRun(
         run_id=run_id,
         time_window_hours=time_window,

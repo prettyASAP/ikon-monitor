@@ -343,8 +343,8 @@ export default function App() {
               <button
                 className={`tw-btn${timeWindow === 168 ? ' tw-active' : ''}`}
                 onClick={() => setTimeWindow(168)}
-                disabled={running || activeProfile === 'napi'}
-                title={activeProfile === 'napi' ? 'NAPI profil mindig 24 órás' : (allRuns.some(r => r.time_window_hours === 168) ? '' : 'Nincs heti futás – indíts egyet')}
+                disabled={running}
+                title={allRuns.some(r => r.time_window_hours === 168) ? '' : 'Nincs heti futás – indíts egyet'}
               >Heti</button>
               <button
                 className={`tw-btn${timeWindow === 24 ? ' tw-active' : ''}`}
