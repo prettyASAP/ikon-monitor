@@ -77,9 +77,11 @@ export default function App() {
   const [timeWindow, setTimeWindow]           = useState(168)  // 168 = heti, 24 = napi
   const [activeProfile, setActiveProfile]     = useState('iko')
 
-  const cancelSim   = useRef(null)
-  const activeRunId = useRef(null)
-  const errorTimer  = useRef(null)
+  const cancelSim    = useRef(null)
+  const activeRunId  = useRef(null)
+  const errorTimer   = useRef(null)
+  const runStartTime = useRef(null)
+  const [elapsed, setElapsed] = useState(0)
 
   const showError = useCallback((msg, level = 'error') => {
     if (errorTimer.current) clearTimeout(errorTimer.current)
@@ -174,9 +176,17 @@ export default function App() {
     } catch (e) { console.error('poll', e) }
   }, 1800, running)
 
+  useInterval(() => {
+    if (running && runStartTime.current) {
+      setElapsed(Math.floor((Date.now() - runStartTime.current) / 1000))
+    }
+  }, 1000, running)
+
   const triggerRun = useCallback(async () => {
     if (running) return
     if (errorTimer.current) clearTimeout(errorTimer.current)
+    runStartTime.current = Date.now()
+    setElapsed(0)
     setRunning(true)
     setCurrentLine(null)
     setSummary(null)
@@ -450,6 +460,11 @@ export default function App() {
         {(running || currentLine) && (
           <section className="run-marquee">
             {running && <span className="terminal-cursor" />}
+            {running && (
+              <span className="run-elapsed">
+                {String(Math.floor(elapsed / 60)).padStart(2, '0')}:{String(elapsed % 60).padStart(2, '0')}
+              </span>
+            )}
             {currentLine && (
               <div className="marquee-line" key={currentLine.id}>
                 <span className={`log-${currentLine.level}`}>{currentLine.msg}</span>
