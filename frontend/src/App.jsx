@@ -166,6 +166,7 @@ export default function App() {
         if (run.status === 'completed') {
           setCurrentRun(run)
           setAllRuns(prev => [run, ...prev.filter(r => r.run_id !== run.run_id)])
+          loadResults(run.run_id)
         } else {
           showError(`✗ Pipeline hiba: ${run.error_msg || 'ismeretlen hiba'}`)
         }
