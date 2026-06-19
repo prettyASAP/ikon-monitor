@@ -115,14 +115,30 @@ export default function App() {
     setAllRuns([])
     setArticles([])
     setSummary(null)
+    const defaultWindow = activeProfile === 'napi' ? 24 : 168
+    setTimeWindow(defaultWindow)
     api.runs.list({ limit: 20, status: 'completed', keyword_profile: activeProfile })
       .then(d => {
         const runs = d.items ?? []
         setAllRuns(runs)
-        if (runs.length > 0) setCurrentRun(runs[0])
+        if (runs.length > 0) {
+          const match = runs.find(r => r.time_window_hours === defaultWindow) ?? runs[0]
+          setCurrentRun(match)
+        }
       })
       .catch(() => {})
   }, [activeProfile])
+
+  // Ha a felhasználó Heti/Napi togglet vált, auto-select a megfelelő futásra
+  useEffect(() => {
+    if (!allRuns.length) return
+    const match = allRuns.find(r => r.time_window_hours === timeWindow)
+    if (match && match.run_id !== currentRun?.run_id) {
+      setCurrentRun(match)
+      setSummary(null)
+      setArticles([])
+    }
+  }, [timeWindow]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const runId = currentRun?.run_id
   useEffect(() => {
@@ -323,18 +339,22 @@ export default function App() {
         {/* ── Hero ── */}
         <section className="hero">
           <div className="hero-top">
-            <div className="time-window-toggle">
-              <button
-                className={`tw-btn${timeWindow === 168 ? ' tw-active' : ''}`}
-                onClick={() => setTimeWindow(168)}
-                disabled={running}
-              >Heti</button>
-              <button
-                className={`tw-btn${timeWindow === 24 ? ' tw-active' : ''}`}
-                onClick={() => setTimeWindow(24)}
-                disabled={running}
-              >Napi</button>
-            </div>
+            {activeProfile !== 'napi' && (
+              <div className="time-window-toggle">
+                <button
+                  className={`tw-btn${timeWindow === 168 ? ' tw-active' : ''}`}
+                  onClick={() => setTimeWindow(168)}
+                  disabled={running}
+                  title={allRuns.some(r => r.time_window_hours === 168) ? '' : 'Nincs heti futás – indíts egyet'}
+                >Heti</button>
+                <button
+                  className={`tw-btn${timeWindow === 24 ? ' tw-active' : ''}`}
+                  onClick={() => setTimeWindow(24)}
+                  disabled={running}
+                  title={allRuns.some(r => r.time_window_hours === 24) ? '' : 'Nincs napi futás – indíts egyet'}
+                >Napi</button>
+              </div>
+            )}
             <button className="btn-run" onClick={triggerRun} disabled={running}>
               {running ? '⟳  Futás folyamatban…' : '▶  Futás indítása'}
             </button>
