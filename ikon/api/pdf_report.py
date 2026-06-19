@@ -40,8 +40,13 @@ def _register_unicode_font() -> tuple[str, str]:
     except Exception:
         pass
 
-    # 2) macOS rendszerfontek — Times New Roman prioritás, majd Arial Unicode
+    # 2) Linux rendszerfontek — fonts-liberation csomag (Docker image)
     candidates = [
+        ("/usr/share/fonts/truetype/liberation/LiberationSerif-Regular.ttf", "LibSerif",
+         "/usr/share/fonts/truetype/liberation/LiberationSerif-Bold.ttf",    "LibSerif-Bold"),
+        ("/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",  "LibSans",
+         "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",     "LibSans-Bold"),
+        # macOS rendszerfontek
         ("/System/Library/Fonts/Supplemental/Times New Roman.ttf", "TNR", "/System/Library/Fonts/Supplemental/Times New Roman Bold.ttf", "TNR-Bold"),
         ("/Library/Fonts/Arial Unicode.ttf",         "SysArialUni", "/System/Library/Fonts/Supplemental/Arial Bold.ttf", "SysArialUni-Bold"),
         ("/System/Library/Fonts/Supplemental/Arial Unicode.ttf", "SysArialUni2",

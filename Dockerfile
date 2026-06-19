@@ -12,6 +12,7 @@ WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         gcc \
+        fonts-liberation \
     && rm -rf /var/lib/apt/lists/*
 
 COPY pyproject.toml ./
