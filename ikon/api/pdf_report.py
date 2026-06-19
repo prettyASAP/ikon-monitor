@@ -253,7 +253,7 @@ def _build_pdf(run: dict, articles: list[dict], source_dist: list[dict] | None =
         story.append(HRFlowable(width="100%", thickness=0.5, color=DIV_CLR))
 
     # ── Cikklista ───────────────────────────────────────────────────────────
-    story.append(Paragraph(f"RELEVÁNS CIKKEK — {len(articles)} DB", sect_st))
+    story.append(Paragraph(f"Hírek — {len(articles)} db", sect_st))
 
     def esc(s: str) -> str:
         return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
