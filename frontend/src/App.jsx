@@ -93,10 +93,11 @@ export default function App() {
     let attempts = 0
     const tryFetch = () => {
       Promise.all([
-        api.articles.list({ run_id: runId, limit: 200 }),
+        api.articles.list({ run_id: runId, category: 'releváns',         limit: 500 }),
+        api.articles.list({ run_id: runId, category: 'felülvizsgálandó', limit: 500 }),
         api.runs.summary(runId),
-      ]).then(([artData, sumData]) => {
-        setArticles(artData.items ?? [])
+      ]).then(([relData, revData, sumData]) => {
+        setArticles([...(relData.items ?? []), ...(revData.items ?? [])])
         setSummary(sumData)
       }).catch(() => {
         if (++attempts < 4) setTimeout(tryFetch, 1500)
