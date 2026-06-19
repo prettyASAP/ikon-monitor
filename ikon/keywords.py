@@ -189,44 +189,6 @@ TV_REQUIRED_CONTEXT: dict[str, str] = {
     # T2: Life TV brandelt műsorkategóriák – Life TV kontextus nélkül generikus szókapcsolat
     "klasszikus sorozat": r"(life\s*tv|lifetv|ozone|media\s+vivantis)",
     "televíziós legenda": r"(life\s*tv|lifetv|ozone|media\s+vivantis)",
-    # ---------------------------------------------------------------------------
-    # NAPI generikus T3 – műfaj/köznév szavak
-    # Önmagukban ~99% FP; csak Life TV / Ozone TV / Media Vivantis kontextusban releváns
-    # ---------------------------------------------------------------------------
-    "akció":               r"(life\s*tv|lifetv|ozone|media\s+vivantis)",
-    "bulvár":              r"(life\s*tv|lifetv|ozone|media\s+vivantis)",
-    "bűnügy":              r"(life\s*tv|lifetv|ozone|media\s+vivantis)",
-    "celebek":             r"(life\s*tv|lifetv|ozone|media\s+vivantis)",
-    "detektív":            r"(life\s*tv|lifetv|ozone|media\s+vivantis)",
-    "életmód":             r"(life\s*tv|lifetv|ozone|media\s+vivantis)",
-    "főzés":               r"(life\s*tv|lifetv|ozone|media\s+vivantis)",
-    "gasztronómia":        r"(life\s*tv|lifetv|ozone|media\s+vivantis)",
-    "Hawaii":              r"(life\s*tv|lifetv|ozone|media\s+vivantis)",
-    "humor":               r"(life\s*tv|lifetv|ozone|media\s+vivantis)",
-    "interjú":             r"(life\s*tv|lifetv|ozone|media\s+vivantis)",
-    "Kábeltévé":           r"(life\s*tv|lifetv|ozone|media\s+vivantis)",
-    "kikapcsolódás":       r"(life\s*tv|lifetv|ozone|media\s+vivantis)",
-    "krimi":               r"(life\s*tv|lifetv|ozone|media\s+vivantis)",
-    "közösség":            r"(life\s*tv|lifetv|ozone|media\s+vivantis)",
-    "magánélet":           r"(life\s*tv|lifetv|ozone|media\s+vivantis)",
-    "média":               r"(life\s*tv|lifetv|ozone|media\s+vivantis)",
-    "műsor":               r"(life\s*tv|lifetv|ozone|media\s+vivantis)",
-    "nosztalgia":          r"(life\s*tv|lifetv|ozone|media\s+vivantis)",
-    "nyomozás":            r"(life\s*tv|lifetv|ozone|media\s+vivantis)",
-    "otthon":              r"(life\s*tv|lifetv|ozone|media\s+vivantis)",
-    "Produkció":           r"(life\s*tv|lifetv|ozone|media\s+vivantis)",
-    "recept":              r"(life\s*tv|lifetv|ozone|media\s+vivantis)",
-    "retro":               r"(life\s*tv|lifetv|ozone|media\s+vivantis)",
-    "Saját gyártás":       r"(life\s*tv|lifetv|ozone|media\s+vivantis)",
-    "sorozat":             r"(life\s*tv|lifetv|ozone|media\s+vivantis)",
-    "szórakoztatás":       r"(life\s*tv|lifetv|ozone|media\s+vivantis)",
-    "sztárok":             r"(life\s*tv|lifetv|ozone|media\s+vivantis)",
-    "televízió":           r"(life\s*tv|lifetv|ozone|media\s+vivantis)",
-    "televíziós tartalom": r"(life\s*tv|lifetv|ozone|media\s+vivantis)",
-    "vacsora":             r"(life\s*tv|lifetv|ozone|media\s+vivantis)",
-    "vendégek":            r"(life\s*tv|lifetv|ozone|media\s+vivantis)",
-    "család":              r"(life\s*tv|lifetv|ozone|media\s+vivantis)",
-    "beszélgetés":         r"(life\s*tv|lifetv|ozone|media\s+vivantis)",
 }
 
 # DS2: bulvár büntetés kizárva TV show T3 kulcsszavaknál
