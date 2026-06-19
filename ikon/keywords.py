@@ -117,6 +117,8 @@ TV_RADIO_KEYWORDS: dict[str, list[str]] = {
         "True Crimes",
         "Farm VIP",
         "A Dal",
+        # Magyar médiacsoportok – tulajdonosváltás, leépítés, szerkesztőségi hírek
+        "Mediaworks",
     ],
     "tier3_generikus": [
         # Egyszavas köznevek – magas FP-kockázat, de monitorizálandók
@@ -334,6 +336,8 @@ NAPI_KEYWORDS: dict[str, list[str]] = {
         # Brandelt Life TV műsorkategóriák – required context kötelező
         "klasszikus sorozat",
         "televíziós legenda",
+        # Magyar médiacsoportok – tulajdonosváltás, leépítés, szerkesztőségi hírek
+        "Mediaworks",
         # Médiaipari személyek – korábban iko_ceg UNIQUE-konfliktus
         "Kovács Gergely",
         "Nielsen közönségmérés",
