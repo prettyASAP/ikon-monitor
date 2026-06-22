@@ -77,6 +77,11 @@ export default function App() {
   const [timeWindow, setTimeWindow]           = useState(168)  // 168 = heti, 24 = napi
   const [activeProfile, setActiveProfile]     = useState('iko')
 
+  const [addModalOpen, setAddModalOpen]   = useState(false)
+  const [addForm, setAddForm]             = useState({ url: '', title: '', source: '', excerpt: '', published_date: '' })
+  const [addLoading, setAddLoading]       = useState(false)
+  const [addError, setAddError]           = useState(null)
+
   const cancelSim    = useRef(null)
   const activeRunId  = useRef(null)
   const errorTimer   = useRef(null)
@@ -266,6 +271,29 @@ export default function App() {
     }
   }, [selected, currentRun, showError])
 
+  const handleAddArticle = useCallback(async (e) => {
+    e.preventDefault()
+    setAddLoading(true)
+    setAddError(null)
+    try {
+      await api.articles.create({
+        url: addForm.url.trim(),
+        title: addForm.title.trim(),
+        source: addForm.source.trim(),
+        excerpt: addForm.excerpt.trim(),
+        published_date: addForm.published_date.trim(),
+        run_id: currentRun?.run_id ?? undefined,
+      })
+      setAddModalOpen(false)
+      setAddForm({ url: '', title: '', source: '', excerpt: '', published_date: '' })
+      if (currentRun) loadResults(currentRun.run_id)
+    } catch (err) {
+      setAddError(err.detail?.detail?.message ?? err.message ?? 'Hiba történt')
+    } finally {
+      setAddLoading(false)
+    }
+  }, [addForm, currentRun, loadResults])
+
   const downloadPdf = useCallback(async () => {
     if (!currentRun) return
     try {
@@ -369,6 +397,9 @@ export default function App() {
             </button>
             {currentRun && !running && pdfArticles.length > 0 && (
               <button className="btn-pdf btn-pdf-hero" onClick={downloadPdf}>↓ PDF</button>
+            )}
+            {currentRun && !running && (
+              <button className="btn-add-article" onClick={() => setAddModalOpen(true)} title="Cikk manuális hozzáadása">＋ Cikk</button>
             )}
             {allRuns.length > 0 && !running && (
               <select
@@ -654,6 +685,53 @@ export default function App() {
           </section>
         )}
       </div>
+
+      {/* ── Manuális cikk modal ── */}
+      {addModalOpen && (
+        <div className="modal-overlay" onClick={() => setAddModalOpen(false)}>
+          <div className="modal-box" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <span className="modal-title">Cikk hozzáadása</span>
+              <button className="modal-close" onClick={() => setAddModalOpen(false)}>✕</button>
+            </div>
+            <form className="modal-form" onSubmit={handleAddArticle}>
+              <label className="modal-label">
+                URL *
+                <input className="modal-input" type="url" required placeholder="https://..."
+                  value={addForm.url} onChange={e => setAddForm(f => ({ ...f, url: e.target.value }))} />
+              </label>
+              <label className="modal-label">
+                Cím *
+                <input className="modal-input" type="text" required placeholder="Cikk címe"
+                  value={addForm.title} onChange={e => setAddForm(f => ({ ...f, title: e.target.value }))} />
+              </label>
+              <label className="modal-label">
+                Forrás *
+                <input className="modal-input" type="text" required placeholder="pl. Index, Blikk, Telex"
+                  value={addForm.source} onChange={e => setAddForm(f => ({ ...f, source: e.target.value }))} />
+              </label>
+              <label className="modal-label">
+                Lead (opcionális)
+                <textarea className="modal-input modal-textarea" placeholder="Bevezető szöveg..."
+                  rows={3} value={addForm.excerpt}
+                  onChange={e => setAddForm(f => ({ ...f, excerpt: e.target.value }))} />
+              </label>
+              <label className="modal-label">
+                Dátum (opcionális)
+                <input className="modal-input" type="text" placeholder="ÉÉÉÉ.HH.NN"
+                  value={addForm.published_date} onChange={e => setAddForm(f => ({ ...f, published_date: e.target.value }))} />
+              </label>
+              {addError && <div className="modal-error">{addError}</div>}
+              <div className="modal-actions">
+                <button type="button" className="modal-btn-cancel" onClick={() => setAddModalOpen(false)}>Mégsem</button>
+                <button type="submit" className="modal-btn-submit" disabled={addLoading}>
+                  {addLoading ? 'Hozzáadás…' : 'Hozzáad'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -32,9 +32,10 @@ export const api = {
   },
 
   articles: {
-    list:  (p = {})     => req(`${BASE}/articles?${qs(p)}`),
-    get:   (id)         => req(`${BASE}/articles/${id}`),
-    trend: (kw, n = 10) => req(`${BASE}/articles/${encodeURIComponent(kw)}/trend?n_runs=${n}`),
+    list:   (p = {})     => req(`${BASE}/articles?${qs(p)}`),
+    get:    (id)         => req(`${BASE}/articles/${id}`),
+    create: (body)       => req(`${BASE}/articles`, { method: 'POST', body }),
+    trend:  (kw, n = 10) => req(`${BASE}/articles/${encodeURIComponent(kw)}/trend?n_runs=${n}`),
   },
 
   feedback: {

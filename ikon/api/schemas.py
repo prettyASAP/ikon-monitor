@@ -140,6 +140,19 @@ class BulkFeedbackIn(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Manual article
+# ---------------------------------------------------------------------------
+
+class ManualArticleIn(BaseModel):
+    url: str = Field(..., description="Cikk teljes URL-je")
+    title: str = Field(..., min_length=1, description="Cikk címe")
+    excerpt: str = Field(default="", description="Lead / bevezető szöveg")
+    source: str = Field(..., min_length=1, description="Forrás neve (pl. 'Index')")
+    published_date: str = Field(default="", description="YYYY.MM.DD formátum, üresen = mai nap")
+    run_id: Optional[str] = Field(default=None, description="Ha nincs megadva, a legutóbbi futáshoz adja")
+
+
+# ---------------------------------------------------------------------------
 # Keywords
 # ---------------------------------------------------------------------------
 

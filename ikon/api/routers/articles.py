@@ -1,20 +1,24 @@
 """
-Cikk lekérdezések.
+Cikk lekérdezések + manuális cikk hozzáadás.
 
-GET /api/v1/articles              – szűrt + paginált cikk lista (FTS5 keresés)
-GET /api/v1/articles/{article_id} – egyetlen cikk részletei
-GET /api/v1/articles/{article_id}/trend – kulcsszó trend (utolsó N futás)
+GET  /api/v1/articles              – szűrt + paginált cikk lista (FTS5 keresés)
+POST /api/v1/articles              – manuális cikk hozzáadása
+GET  /api/v1/articles/{article_id} – egyetlen cikk részletei
+GET  /api/v1/articles/{article_id}/trend – kulcsszó trend (utolsó N futás)
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import sqlite3
+from datetime import date, datetime
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from ikon.api.dependencies import get_db
-from ikon.api.schemas import ArticleOut, PaginatedResponse
-from ikon.repository import ArticleFilter, ArticleRepository
+from ikon.api.dependencies import get_config, get_db
+from ikon.api.schemas import ArticleOut, ManualArticleIn, PaginatedResponse
+from ikon.repository import ArticleFilter, ArticleRepository, RunRepository, KeywordRepository
 
 router = APIRouter(tags=["articles"])
 
@@ -48,6 +52,101 @@ def _to_article_out(d: dict) -> ArticleOut:
         reviewer_note=d.get("reviewer_note"),
         scored_at=d.get("scored_at") or "",
     )
+
+
+@router.post("/articles", response_model=ArticleOut, status_code=201)
+def create_manual_article(
+    body: ManualArticleIn,
+    conn: sqlite3.Connection = Depends(get_db),
+    cfg=Depends(get_config),
+) -> ArticleOut:
+    """Manuálisan felvett cikk a legutóbbi (vagy megadott) futáshoz."""
+    from ikon.scoring import categorize, classify_source, score_article
+    from ikon.models import Category, KeywordTier, SourceType
+
+    if not body.url.startswith("http"):
+        raise HTTPException(400, detail={"message": "Érvénytelen URL", "code": "INVALID_URL"})
+
+    # Futás meghatározása
+    run_repo = RunRepository(conn)
+    if body.run_id:
+        run = run_repo.get(body.run_id)
+        if not run:
+            raise HTTPException(404, detail={"message": "Futás nem található", "code": "NOT_FOUND"})
+        run_id = body.run_id
+    else:
+        page = run_repo.list(limit=1, status="completed")
+        if not page.items:
+            raise HTTPException(409, detail={"message": "Nincs befejezett futás", "code": "NO_RUN"})
+        run_id = page.items[0]["run_id"]
+
+    # Profil → aktív kulcsszavak
+    run_row = conn.execute("SELECT keyword_profile FROM pipeline_runs WHERE run_id=?", (run_id,)).fetchone()
+    profile = (run_row["keyword_profile"] if run_row else None) or "iko"
+    kw_rows = KeywordRepository(conn).list(active_only=True, profile=profile)
+
+    # Kulcsszó-egyezés (case-insensitive substring)
+    text = f"{body.title} {body.excerpt}".lower()
+    matched = [r["keyword"] for r in kw_rows if r["keyword"].lower() in text]
+
+    # Best tier
+    tier_order = ["tier1_specifikus", "tier2_kozepes", "tier3_generikus"]
+    kw_tiers = {r["keyword"]: r["tier"] for r in kw_rows}
+    best_tier_val = next(
+        (t for t in tier_order if any(kw_tiers.get(k) == t for k in matched)),
+        "tier3_generikus",
+    )
+
+    # Scoring
+    source_type = classify_source(body.source)
+    score_result = score_article(matched, body.title, body.excerpt, body.source, cfg.scoring)
+    category, _ = categorize(score_result.score, source_type, matched, body.title, body.excerpt, cfg.scoring)
+
+    pub_date = body.published_date or date.today().strftime("%Y.%m.%d")
+    pub_date_iso = pub_date.replace(".", "-") if pub_date else None
+    article_id = hashlib.sha256(body.url.encode()).hexdigest()[:16]
+    scored_at = datetime.utcnow().isoformat()
+
+    conn.execute(
+        """INSERT OR REPLACE INTO articles
+           (article_id, run_id, url, title, source,
+            source_type, published_date, published_date_iso,
+            published_time, excerpt,
+            matched_keywords, best_tier, score, score_reason,
+            category, scored_at)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        (
+            article_id, run_id, body.url, body.title, body.source,
+            source_type.value, pub_date, pub_date_iso,
+            "", body.excerpt,
+            json.dumps(matched, ensure_ascii=False),
+            best_tier_val, score_result.score, score_result.reason,
+            category.value, scored_at,
+        ),
+    )
+    conn.commit()
+
+    return _to_article_out({
+        "article_id": article_id,
+        "run_id": run_id,
+        "url": body.url,
+        "title": body.title,
+        "source": body.source,
+        "source_type": source_type.value,
+        "published_date": pub_date,
+        "published_date_iso": pub_date_iso,
+        "published_time": "",
+        "excerpt": body.excerpt,
+        "matched_keywords": matched,
+        "best_tier": best_tier_val,
+        "score": score_result.score,
+        "score_reason": score_result.reason,
+        "category": category.value,
+        "feedback_decision": None,
+        "reviewer_id": None,
+        "reviewer_note": None,
+        "scored_at": scored_at,
+    })
 
 
 @router.get("/articles", response_model=PaginatedResponse[ArticleOut])
