@@ -286,11 +286,8 @@ def _build_pdf(run: dict, articles: list[dict], source_dist: list[dict] | None =
             kws = []
         kws = _visible_keywords(kws, score_reason)
 
-        approved_label = (
-            f" <font color='#22863a' size='7'>★ kurátor</font>" if fb == "releváns" else ""
-        )
         story.append(Paragraph(
-            f'<link href="{esc(url)}">{esc(raw_title)}</link>{approved_label}',
+            f'<link href="{esc(url)}">{esc(raw_title)}</link>',
             art_tit,
         ))
         story.append(Paragraph(f"{esc(source)}  ·  {date}", art_meta))
