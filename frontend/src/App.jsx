@@ -352,7 +352,9 @@ export default function App() {
   const revApproved = revArticles.filter(a => reviewDecisions[a.article_id] === 'releváns')
   const revRejected = revArticles.filter(a => reviewDecisions[a.article_id] === 'nem_releváns')
   const visibleRevArticles = revArticles.filter(a => reviewDecisions[a.article_id] !== 'nem_releváns')
-  const pdfArticles = [...relArticles, ...revApproved].sort((a, b) => b.score - a.score)
+  const pdfArticles = [...relArticles, ...revApproved]
+    .filter(a => reviewDecisions[a.article_id] !== 'nem_releváns')
+    .sort((a, b) => b.score - a.score)
 
   const PROFILES = [
     { id: 'iko',   label: 'IKO' },
@@ -675,6 +677,11 @@ export default function App() {
                           )}
                         </div>
                         <span className="art-date">{a.published_date_iso?.slice(0, 10) ?? ''}</span>
+                        <button
+                          className="btn-reject-rel"
+                          title="Nem releváns — eltávolít a PDF-ből"
+                          onClick={e => { e.stopPropagation(); handleReview(a.article_id, 'nem_releváns') }}
+                        >✕</button>
                       </div>
                     )
                   })}
