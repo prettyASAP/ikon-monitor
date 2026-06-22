@@ -818,6 +818,30 @@ body {
 }
 .queue-item-rejected .btn-reject-queue { color: var(--red); opacity: 0.7; }
 
+.btn-reject-rel {
+  flex-shrink: 0;
+  margin-left: auto;
+  width: 24px;
+  height: 24px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--r);
+  color: var(--fg-3);
+  font-size: 11px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--ease), color var(--ease), border-color var(--ease), background var(--ease);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.art-row:hover .btn-reject-rel { opacity: 1; }
+.btn-reject-rel:hover {
+  color: var(--red);
+  border-color: rgba(185,28,28,.3);
+  background: rgba(185,28,28,.07);
+}
+
 /* ── Score reason expand ── */
 .queue-score-reason {
   font-family: var(--mono);
