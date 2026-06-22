@@ -180,7 +180,7 @@ def _build_pdf(run: dict, articles: list[dict], source_dist: list[dict] | None =
     from reportlab.lib.units import cm
     from reportlab.lib import colors
     from reportlab.platypus import (
-        Paragraph, Spacer, HRFlowable, Frame, PageTemplate,
+        Paragraph, Spacer, HRFlowable, Frame, PageTemplate, KeepTogether,
     )
     from reportlab.platypus.doctemplate import BaseDocTemplate
 
@@ -286,16 +286,17 @@ def _build_pdf(run: dict, articles: list[dict], source_dist: list[dict] | None =
             kws = []
         kws = _visible_keywords(kws, score_reason)
 
-        story.append(Paragraph(
+        block = [Paragraph(
             f'<link href="{esc(url)}">{esc(raw_title)}</link>',
             art_tit,
-        ))
-        story.append(Paragraph(f"{esc(source)}  ·  {date}", art_meta))
+        )]
+        block.append(Paragraph(f"{esc(source)}  ·  {date}", art_meta))
         if kws:
             kw_str = "  ".join(f"[{esc(k)}]" for k in kws[:6])
-            story.append(Paragraph(kw_str, art_kw))
+            block.append(Paragraph(kw_str, art_kw))
         if excerpt:
-            story.append(Paragraph(esc(excerpt), art_exc))
+            block.append(Paragraph(esc(excerpt), art_exc))
+        story.append(KeepTogether(block))
         story.append(HRFlowable(width="100%", thickness=0.3, color=DIV_CLR))
 
     if not articles:
