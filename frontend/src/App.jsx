@@ -243,8 +243,8 @@ export default function App() {
   }, [])
 
   const selectAll = useCallback(() => {
-    setSelected(new Set(articles.filter(a => a.category === 'felülvizsgálandó').map(a => a.article_id)))
-  }, [articles])
+    setSelected(new Set(articles.filter(a => a.category === 'felülvizsgálandó' && reviewDecisions[a.article_id] !== 'nem_releváns').map(a => a.article_id)))
+  }, [articles, reviewDecisions])
 
   const handleBulk = useCallback(async (decision) => {
     const ids = [...selected]
@@ -323,6 +323,7 @@ export default function App() {
   const revArticles = articles.filter(a => a.category === 'felülvizsgálandó')
   const revApproved = revArticles.filter(a => reviewDecisions[a.article_id] === 'releváns')
   const revRejected = revArticles.filter(a => reviewDecisions[a.article_id] === 'nem_releváns')
+  const visibleRevArticles = revArticles.filter(a => reviewDecisions[a.article_id] !== 'nem_releváns')
   const pdfArticles = [...relArticles, ...revApproved].sort((a, b) => b.score - a.score)
 
   const PROFILES = [
@@ -514,11 +515,11 @@ export default function App() {
             )}
 
             {/* ── Curator queue: REV cikkek ── */}
-            {revArticles.length > 0 && (
+            {visibleRevArticles.length > 0 && (
               <div className="curator-block">
                 <div className="section-label">
                   Felülvizsgálandó
-                  <span className="section-label-count">{revArticles.length}</span>
+                  <span className="section-label-count">{visibleRevArticles.length}</span>
                   {!bulkMode && revApproved.length > 0 && (
                     <span className="review-progress">{revApproved.length} jóváhagyva</span>
                   )}
@@ -538,7 +539,7 @@ export default function App() {
                   )}
                 </div>
                 <div className="queue-list">
-                  {revArticles.map(a => {
+                  {visibleRevArticles.map(a => {
                     const dec = reviewDecisions[a.article_id]
                     const isApproved = dec === 'releváns'
                     const isRejected = dec === 'nem_releváns'
