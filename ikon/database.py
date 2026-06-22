@@ -29,6 +29,7 @@ MIGRATIONS: dict[int, Path] = {
     3: Path(__file__).parent.parent / "migrations" / "v003_fts_delete_race.sql",
     4: Path(__file__).parent.parent / "migrations" / "v004_keyword_profiles.sql",
     5: Path(__file__).parent.parent / "migrations" / "v005_cross_profile_keywords.sql",
+    6: Path(__file__).parent.parent / "migrations" / "v006_tv2_hosts.sql",
 }
 
 DDL = """

@@ -189,6 +189,15 @@ TV_REQUIRED_CONTEXT: dict[str, str] = {
     # T2: Life TV brandelt műsorkategóriák – Life TV kontextus nélkül generikus szókapcsolat
     "klasszikus sorozat": r"(life\s*tv|lifetv|ozone|media\s+vivantis)",
     "televíziós legenda": r"(life\s*tv|lifetv|ozone|media\s+vivantis)",
+    # ---------------------------------------------------------------------------
+    # NAPI profil – TV2 műsorvezetők
+    # ---------------------------------------------------------------------------
+    "Orsovai Reni":     r"(tv2|televízió|műsorvezető|műsor|adás|csatorn|mokka|celeb|sztár)",
+    "Liptai Claudia":   r"(tv2|televízió|műsorvezető|műsor|adás|csatorn|mokka|celeb|sztár)",
+    "Sebestyén Balázs": r"(tv2|televízió|műsorvezető|műsor|adás|csatorn|fomo|rádió|celeb|sztár)",
+    "Istenes Bence":    r"(tv2|televízió|műsorvezető|műsor|adás|csatorn|mokka|farm|celeb|sztár)",
+    "Sarka Kata":       r"(tv2|televízió|műsorvezető|műsor|adás|csatorn|celeb|sztár)",
+    "Csobot Adél":      r"(tv2|televízió|műsorvezető|műsor|adás|csatorn|marics|celeb|sztár)",
 }
 
 # DS2: bulvár büntetés kizárva TV show T3 kulcsszavaknál
@@ -291,6 +300,13 @@ NAPI_KEYWORDS: dict[str, list[str]] = {
         # Személyek – required context szükséges (magas FP)
         "Hajdú Péter",
         "Gáspár Győző",
+        # TV2 műsorvezetők – required context: tv2/televízió/műsorvezető/celeb kontextus kötelező
+        "Orsovai Reni",
+        "Liptai Claudia",
+        "Sebestyén Balázs",
+        "Istenes Bence",
+        "Sarka Kata",
+        "Csobot Adél",
         # Klasszikus sorozatcímek – required context szükséges
         "Columbo",
         # Media Vivantis online platform – egyedi szó de "propeller" = légcsavar is
@@ -387,6 +403,13 @@ FULL_NAME_REQUIRED: frozenset[str] = frozenset({
     "Hajdú Péter",
     "Gáspár Győző",
     "Kovács Gergely",
+    # NAPI profil – TV2 műsorvezetők
+    "Orsovai Reni",
+    "Liptai Claudia",
+    "Sebestyén Balázs",
+    "Istenes Bence",
+    "Sarka Kata",
+    "Csobot Adél",
     # HTÉN profil
     "Ember Márk",
     "Marics Peti",
