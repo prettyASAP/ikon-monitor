@@ -101,6 +101,9 @@ def create_manual_article(
     source_type = classify_source(body.source)
     score_result = score_article(matched, body.title, body.excerpt, body.source, cfg.scoring)
     category, _ = categorize(score_result.score, source_type, matched, body.title, body.excerpt, cfg.scoring)
+    # Manuálisan hozzáadott cikk soha nem kerülhet zajba – minimum felülvizsgálandó
+    if category == Category.NOISE:
+        category = Category.REVIEW
 
     pub_date = body.published_date or date.today().strftime("%Y.%m.%d")
     pub_date_iso = pub_date.replace(".", "-") if pub_date else None
