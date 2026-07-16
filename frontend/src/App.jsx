@@ -75,7 +75,7 @@ export default function App() {
   const [newKwText, setNewKwText]             = useState('')
   const [newKwTier, setNewKwTier]             = useState('tier2_kozepes')
   const [timeWindow, setTimeWindow]           = useState(168)  // 168 = heti, 24 = napi
-  const [activeProfile, setActiveProfile]     = useState('iko')
+  const [activeProfile, setActiveProfile]     = useState('napi')
 
   const [addModalOpen, setAddModalOpen]   = useState(false)
   const [addForm, setAddForm]             = useState({ url: '', title: '', source: '', excerpt: '', published_date: '' })
@@ -356,26 +356,9 @@ export default function App() {
     .filter(a => reviewDecisions[a.article_id] !== 'nem_releváns')
     .sort((a, b) => b.score - a.score)
 
-  const PROFILES = [
-    { id: 'iko',   label: 'IKO' },
-    { id: 'napi',  label: 'NAPI' },
-  ]
-
   return (
     <div className="app">
       <div className="page-content">
-
-        {/* ── Profile tabs ── */}
-        <div className="profile-tabs">
-          {PROFILES.map(p => (
-            <button
-              key={p.id}
-              className={`profile-tab${activeProfile === p.id ? ' profile-tab-active' : ''}`}
-              onClick={() => { if (!running) setActiveProfile(p.id) }}
-              disabled={running}
-            >{p.label}</button>
-          ))}
-        </div>
 
         {/* ── Hero ── */}
         <section className="hero">
