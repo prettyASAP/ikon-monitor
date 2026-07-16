@@ -60,7 +60,7 @@ class RunOut(BaseModel):
     status: str
     started_at: str
     completed_at: Optional[str] = None
-    time_window_hours: int = 168
+    time_window_hours: int = 72
     keyword_profile: str = "iko_ceg"
     total_raw: int = 0
     total_unique: int = 0
@@ -82,8 +82,8 @@ class RunCreateRequest(BaseModel):
         description="A hívó azonosítója (pl. 'api', 'user@example.com')"
     )
     time_window_hours: int = Field(
-        default=168,
-        description="Keresési időablak órában (pl. 24 = napi, 168 = heti)"
+        default=72,
+        description="Keresési időablak órában (pl. 24 = napi, 72 = három napos)"
     )
     keyword_profile: str = Field(
         default="iko_ceg",

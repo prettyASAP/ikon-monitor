@@ -124,7 +124,7 @@ def generate_run_pdf(conn: sqlite3.Connection, run_id: str) -> bytes:
 def _date_range_str(run: dict, profile: str = "iko_ceg") -> str:
     try:
         started = datetime.fromisoformat(run["started_at"])
-        hours = int(run.get("time_window_hours") or 168)
+        hours = int(run.get("time_window_hours") or 72)
         if profile == "napi" or hours <= 24:
             # Napi: csak az adott nap, YYYY-MM-DD formátum
             return started.strftime("%Y-%m-%d")

@@ -74,7 +74,7 @@ export default function App() {
   const [allKeywords, setAllKeywords]         = useState([])
   const [newKwText, setNewKwText]             = useState('')
   const [newKwTier, setNewKwTier]             = useState('tier2_kozepes')
-  const [timeWindow, setTimeWindow]           = useState(168)  // 168 = heti, 24 = napi
+  const [timeWindow, setTimeWindow]           = useState(72)  // 72 = három napos, 24 = napi
   const [activeProfile, setActiveProfile]     = useState('napi')
 
   const [addModalOpen, setAddModalOpen]   = useState(false)
@@ -124,7 +124,7 @@ export default function App() {
     setAllRuns([])
     setArticles([])
     setSummary(null)
-    const defaultWindow = activeProfile === 'napi' ? 24 : 168
+    const defaultWindow = activeProfile === 'napi' ? 24 : 72
     setTimeWindow(defaultWindow)
     api.runs.list({ limit: 20, status: 'completed', keyword_profile: activeProfile })
       .then(d => {
@@ -385,11 +385,11 @@ export default function App() {
           <div className="hero-top">
             <div className="time-window-toggle">
               <button
-                className={`tw-btn${timeWindow === 168 ? ' tw-active' : ''}`}
-                onClick={() => setTimeWindow(168)}
+                className={`tw-btn${timeWindow === 72 ? ' tw-active' : ''}`}
+                onClick={() => setTimeWindow(72)}
                 disabled={running}
-                title={allRuns.some(r => r.time_window_hours === 168) ? '' : 'Nincs heti futás – indíts egyet'}
-              >Heti</button>
+                title={allRuns.some(r => r.time_window_hours === 72) ? '' : 'Nincs három napos futás – indíts egyet'}
+              >Három napos</button>
               <button
                 className={`tw-btn${timeWindow === 24 ? ' tw-active' : ''}`}
                 onClick={() => setTimeWindow(24)}
