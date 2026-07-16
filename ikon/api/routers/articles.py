@@ -152,6 +152,77 @@ def create_manual_article(
     })
 
 
+@router.get("/articles/fetch-meta")
+def fetch_article_meta(
+    url: str = Query(..., description="Cikk URL-je"),
+) -> dict:
+    """Open Graph + HTML metaadatok lekérése URL alapján (autofill a manuális cikk modalhoz)."""
+    import re
+    import urllib.parse
+    import urllib.request
+    from html.parser import HTMLParser
+
+    if not url.startswith("http"):
+        raise HTTPException(400, detail={"message": "Érvénytelen URL", "code": "INVALID_URL"})
+
+    class _MetaParser(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.meta: dict = {}
+            self._title = ""
+            self._in_title = False
+
+        def handle_starttag(self, tag, attrs):
+            d = dict(attrs)
+            if tag == "title":
+                self._in_title = True
+            elif tag == "meta":
+                prop = (d.get("property") or d.get("name") or "").lower()
+                content = d.get("content") or ""
+                if prop and content:
+                    self.meta[prop] = content
+
+        def handle_data(self, data):
+            if self._in_title:
+                self._title += data
+
+        def handle_endtag(self, tag):
+            if tag == "title":
+                self._in_title = False
+
+    try:
+        req_obj = urllib.request.Request(
+            url,
+            headers={"User-Agent": "Mozilla/5.0 (compatible; IKO-Monitor/1.0; +https://ikon-monitor.railway.app)"},
+        )
+        with urllib.request.urlopen(req_obj, timeout=8) as resp:
+            raw = resp.read(300_000)
+            charset = resp.headers.get_content_charset() or "utf-8"
+            html = raw.decode(charset, errors="replace")
+    except Exception as exc:
+        raise HTTPException(422, detail={"message": f"Nem sikerült letölteni: {exc}", "code": "FETCH_ERROR"})
+
+    parser = _MetaParser()
+    try:
+        parser.feed(html)
+    except Exception:
+        pass
+
+    m = parser.meta
+    title   = (m.get("og:title") or parser._title.strip() or "")[:500]
+    source  = (m.get("og:site_name") or urllib.parse.urlparse(url).netloc.removeprefix("www."))[:100]
+    excerpt = (m.get("og:description") or m.get("description") or "")[:2000]
+
+    raw_date = m.get("article:published_time") or m.get("datepublished") or m.get("article:modified_time") or ""
+    published_date = ""
+    if raw_date:
+        dm = re.match(r"(\d{4})-(\d{2})-(\d{2})", raw_date)
+        if dm:
+            published_date = f"{dm.group(1)}.{dm.group(2)}.{dm.group(3)}"
+
+    return {"title": title, "source": source, "excerpt": excerpt, "published_date": published_date}
+
+
 @router.get("/articles", response_model=PaginatedResponse[ArticleOut])
 def list_articles(
     run_id: Optional[str] = Query(default=None, description="Pipeline futás ID"),
