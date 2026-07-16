@@ -261,7 +261,7 @@ body {
   outline: none;
   transition: border-color .12s;
 }
-.modal-input:focus { border-color: var(--accent); }
+.modal-input:focus { border-color: var(--blue); }
 
 .modal-textarea { resize: vertical; min-height: 60px; }
 
@@ -295,7 +295,7 @@ body {
   padding: 7px 20px;
   border: none;
   border-radius: 6px;
-  background: var(--accent);
+  background: var(--green);
   color: #fff;
   font-size: 13px;
   font-weight: 600;
