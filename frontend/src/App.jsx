@@ -81,6 +81,7 @@ export default function App() {
   const [addForm, setAddForm]             = useState({ url: '', title: '', source: '', excerpt: '', published_date: '' })
   const [addLoading, setAddLoading]       = useState(false)
   const [addError, setAddError]           = useState(null)
+  const [metaLoading, setMetaLoading]     = useState(false)
 
   const cancelSim    = useRef(null)
   const activeRunId  = useRef(null)
@@ -270,6 +271,25 @@ export default function App() {
       showError('✗ Tömeges döntés mentése sikertelen')
     }
   }, [selected, currentRun, showError])
+
+  const handleUrlBlur = useCallback(async (url) => {
+    if (!url.startsWith('http')) return
+    setMetaLoading(true)
+    try {
+      const meta = await api.articles.fetchMeta(url)
+      setAddForm(f => ({
+        ...f,
+        title:          f.title          || meta.title          || '',
+        source:         f.source         || meta.source         || '',
+        excerpt:        f.excerpt        || meta.excerpt        || '',
+        published_date: f.published_date || meta.published_date || '',
+      }))
+    } catch (_) {
+      // silently fail – user fills manually
+    } finally {
+      setMetaLoading(false)
+    }
+  }, [])
 
   const handleAddArticle = useCallback(async (e) => {
     e.preventDefault()
@@ -686,9 +706,11 @@ export default function App() {
             </div>
             <form className="modal-form" onSubmit={handleAddArticle}>
               <label className="modal-label">
-                URL *
+                URL *{metaLoading && <span style={{ fontWeight: 400, color: 'var(--fg-3)', marginLeft: 6 }}>adatok betöltése…</span>}
                 <input className="modal-input" type="url" required placeholder="https://..."
-                  value={addForm.url} onChange={e => setAddForm(f => ({ ...f, url: e.target.value }))} />
+                  value={addForm.url}
+                  onChange={e => setAddForm(f => ({ ...f, url: e.target.value }))}
+                  onBlur={e => handleUrlBlur(e.target.value)} />
               </label>
               <label className="modal-label">
                 Cím *
