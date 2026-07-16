@@ -710,6 +710,10 @@ export default function App() {
                 <input className="modal-input" type="url" required placeholder="https://..."
                   value={addForm.url}
                   onChange={e => setAddForm(f => ({ ...f, url: e.target.value }))}
+                  onPaste={e => {
+                    const pasted = e.clipboardData.getData('text').trim()
+                    if (pasted.startsWith('http')) handleUrlBlur(pasted)
+                  }}
                   onBlur={e => handleUrlBlur(e.target.value)} />
               </label>
               <label className="modal-label">
