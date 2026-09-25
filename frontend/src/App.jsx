@@ -74,8 +74,11 @@ export default function App() {
   const [allKeywords, setAllKeywords]         = useState([])
   const [newKwText, setNewKwText]             = useState('')
   const [newKwTier, setNewKwTier]             = useState('tier2_kozepes')
-  const [timeWindow, setTimeWindow]           = useState(72)  // 72 = három napos, 24 = napi
+  const [timeWindow, setTimeWindow]           = useState(72)
   const [activeProfile, setActiveProfile]     = useState('napi')
+  const [darkMode, setDarkMode]               = useState(() => {
+    try { return localStorage.getItem('ikon-theme') === 'dark' } catch { return false }
+  })
 
   const [addModalOpen, setAddModalOpen]   = useState(false)
   const [addForm, setAddForm]             = useState({ url: '', title: '', source: '', excerpt: '', published_date: '' })
@@ -88,6 +91,13 @@ export default function App() {
   const errorTimer   = useRef(null)
   const runStartTime = useRef(null)
   const [elapsed, setElapsed] = useState(0)
+
+  useEffect(() => {
+    try {
+      document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light')
+      localStorage.setItem('ikon-theme', darkMode ? 'dark' : 'light')
+    } catch {}
+  }, [darkMode])
 
   const showError = useCallback((msg, level = 'error') => {
     if (errorTimer.current) clearTimeout(errorTimer.current)
@@ -138,7 +148,6 @@ export default function App() {
       .catch(() => {})
   }, [activeProfile])
 
-  // Ha a felhasználó Heti/Napi togglet vált, auto-select a megfelelő futásra
   useEffect(() => {
     if (!allRuns.length) return
     const match = allRuns.find(r => r.time_window_hours === timeWindow)
@@ -379,63 +388,101 @@ export default function App() {
 
   return (
     <div className="app">
-      <div className="page-content">
 
-        {/* ── Hero ── */}
-        <section className="hero">
-          <div className="hero-top">
-            <div className="time-window-toggle">
-              <button
-                className={`tw-btn${timeWindow === 72 ? ' tw-active' : ''}`}
-                onClick={() => setTimeWindow(72)}
-                disabled={running}
-                title={allRuns.some(r => r.time_window_hours === 72) ? '' : 'Nincs három napos futás – indíts egyet'}
-              >Három napos</button>
-              <button
-                className={`tw-btn${timeWindow === 24 ? ' tw-active' : ''}`}
-                onClick={() => setTimeWindow(24)}
-                disabled={running}
-                title={allRuns.some(r => r.time_window_hours === 24) ? '' : 'Nincs napi futás – indíts egyet'}
-              >Napi</button>
-            </div>
-            <button className="btn-run" onClick={triggerRun} disabled={running}>
-              {running ? '⟳  Futás folyamatban…' : '▶  Futás indítása'}
-            </button>
-            {currentRun && !running && pdfArticles.length > 0 && (
-              <button className="btn-pdf btn-pdf-hero" onClick={downloadPdf}>↓ PDF</button>
-            )}
-            {currentRun && !running && (
-              <button className="btn-add-article" onClick={() => setAddModalOpen(true)} title="Cikk manuális hozzáadása">＋ Cikk</button>
-            )}
-            {allRuns.length > 0 && !running && (
-              <select
-                className="run-selector"
-                value={currentRun?.run_id || ''}
-                onChange={e => {
-                  const run = allRuns.find(r => r.run_id === e.target.value)
-                  if (run) { setCurrentRun(run); setSummary(null); setArticles([]) }
-                }}
-              >
-                {allRuns.map(r => (
-                  <option key={r.run_id} value={r.run_id}>
-                    {r.run_id}  ·  {r.relevant} rel / {r.review} rev
-                  </option>
-                ))}
-              </select>
-            )}
-            <div className={`status-dot ${health == null ? 'loading' : health.status === 'ok' ? 'ok' : 'error'}`}
-                 title={health?.status === 'ok' ? `API v${health.schema_version || '?'}` : 'API hiba'}
-                 style={{ marginLeft: 'auto', flexShrink: 0 }} />
+      {/* ── Oldal fejléc ── */}
+      <header className="page-header">
+        <div className="ph-brand">
+          <span className="ph-title">IKON Monitor</span>
+          <span className="ph-sub">Napi sajtóelemzés</span>
+        </div>
+
+        <div className="ph-controls">
+          <div className="time-window-toggle">
+            <button
+              className={`tw-btn${timeWindow === 72 ? ' tw-active' : ''}`}
+              onClick={() => setTimeWindow(72)}
+              disabled={running}
+              title={allRuns.some(r => r.time_window_hours === 72)
+                ? 'Három napos időablakra vált'
+                : 'Nincs három napos futás – indíts egyet'}
+            >Három napos</button>
+            <button
+              className={`tw-btn${timeWindow === 24 ? ' tw-active' : ''}`}
+              onClick={() => setTimeWindow(24)}
+              disabled={running}
+              title={allRuns.some(r => r.time_window_hours === 24)
+                ? 'Napi időablakra vált'
+                : 'Nincs napi futás – indíts egyet'}
+            >Napi</button>
           </div>
-        </section>
+          <button
+            className="btn-run"
+            onClick={triggerRun}
+            disabled={running}
+            title={running ? 'Futás folyamatban…' : 'Új hírfigyelési futás indítása az aktív kulcsszavakkal'}
+          >
+            {running ? '⟳  Futás folyamatban…' : '▶  Futás indítása'}
+          </button>
+        </div>
 
-        {/* ── Keywords ── */}
+        <div className="ph-actions">
+          {allRuns.length > 0 && !running && (
+            <select
+              className="run-selector"
+              value={currentRun?.run_id || ''}
+              title="Válassz egy korábbi futást az eredmények megtekintéséhez"
+              onChange={e => {
+                const run = allRuns.find(r => r.run_id === e.target.value)
+                if (run) { setCurrentRun(run); setSummary(null); setArticles([]) }
+              }}
+            >
+              {allRuns.map(r => (
+                <option key={r.run_id} value={r.run_id}>
+                  {r.run_id}  ·  {r.relevant} rel / {r.review} rev
+                </option>
+              ))}
+            </select>
+          )}
+          {currentRun && !running && pdfArticles.length > 0 && (
+            <button
+              className="btn-pdf-hero"
+              onClick={downloadPdf}
+              title="Napi PDF letöltése a releváns cikkekkel"
+            >↓ PDF</button>
+          )}
+          {currentRun && !running && (
+            <button
+              className="btn-add-article"
+              onClick={() => setAddModalOpen(true)}
+              title="Cikk manuális hozzáadása az aktuális futáshoz"
+            >＋ Cikk</button>
+          )}
+          <button
+            className="btn-dark-mode"
+            onClick={() => setDarkMode(d => !d)}
+            title={darkMode ? 'Váltás világos módra' : 'Váltás sötét módra'}
+            aria-label={darkMode ? 'Világos mód' : 'Sötét mód'}
+          >{darkMode ? '☀' : '☾'}</button>
+          <div
+            className={`status-dot ${health == null ? 'loading' : health.status === 'ok' ? 'ok' : 'error'}`}
+            title={health?.status === 'ok' ? `API v${health.schema_version || '?'} — rendszer rendben` : 'API hiba – a backend nem érhető el'}
+          />
+        </div>
+      </header>
+
+      <main className="page-content">
+
+        {/* ── Kulcsszavak ── */}
         <section className="kw-section">
           <div className="section-label">
             Aktív kulcsszavak
             <span className="section-label-count">{keywords.length}</span>
-            <button className="btn-kw-manage" onClick={kwPanelOpen ? () => setKwPanelOpen(false) : openKwPanel}>
-              {kwPanelOpen ? '✕ Bezár' : '⚙ Kezel'}
+            <button
+              className="btn-kw-manage"
+              onClick={kwPanelOpen ? () => setKwPanelOpen(false) : openKwPanel}
+              title={kwPanelOpen ? 'Kulcsszó panel bezárása' : 'Kulcsszavak kezelése és hozzáadása'}
+            >
+              {kwPanelOpen ? '✕ Bezárás' : '⚙ Kezelés'}
             </button>
           </div>
           {[['tier1_specifikus', tier1, 'kw-t1', 'T1'],
@@ -451,7 +498,7 @@ export default function App() {
             )
           )}
 
-          {/* ── Keyword management panel ── */}
+          {/* ── Kulcsszó kezelő panel ── */}
           {kwPanelOpen && (
             <div className="kw-panel">
               <div className="kw-panel-list">
@@ -466,7 +513,10 @@ export default function App() {
                       {tierKws.map(kw => (
                         <div key={kw.id} className={`kw-panel-row${kw.is_active ? '' : ' kw-row-inactive'}`}>
                           <span className="kw-panel-word">{kw.keyword}</span>
-                          <label className="toggle-switch">
+                          <label
+                            className="toggle-switch"
+                            title={kw.is_active ? `Letiltja: ${kw.keyword}` : `Aktiválja: ${kw.keyword}`}
+                          >
                             <input type="checkbox" checked={!!kw.is_active} onChange={() => toggleKwActive(kw)} />
                             <span className="toggle-slider" />
                           </label>
@@ -483,19 +533,29 @@ export default function App() {
                   value={newKwText}
                   onChange={e => setNewKwText(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && addKeyword()}
+                  aria-label="Új kulcsszó szövege"
                 />
-                <select className="kw-add-tier" value={newKwTier} onChange={e => setNewKwTier(e.target.value)}>
+                <select
+                  className="kw-add-tier"
+                  value={newKwTier}
+                  onChange={e => setNewKwTier(e.target.value)}
+                  title="Az új kulcsszó szintjének kiválasztása"
+                >
                   <option value="tier1_specifikus">T1</option>
                   <option value="tier2_kozepes">T2</option>
                   <option value="tier3_generikus">T3</option>
                 </select>
-                <button className="btn-kw-add" onClick={addKeyword}>+ Hozzáad</button>
+                <button
+                  className="btn-kw-add"
+                  onClick={addKeyword}
+                  title="Hozzáadja az új kulcsszót a profilhoz"
+                >+ Hozzáad</button>
               </div>
             </div>
           )}
         </section>
 
-        {/* ── Running marquee ── */}
+        {/* ── Futás marquee ── */}
         {(running || currentLine) && (
           <section className="run-marquee">
             {running && <span className="terminal-cursor" />}
@@ -512,19 +572,19 @@ export default function App() {
           </section>
         )}
 
-        {/* ── Results ── */}
+        {/* ── Eredmények ── */}
         {currentRun && summary && !running && (
           <section className="results-section">
             <div className="section-label">Eredmények</div>
 
-            {/* Metrics */}
+            {/* Metrikák */}
             <div className="metrics-row">
               {[
-                { val: currentRun.relevant,     label: 'Releváns', cls: 'metric-relevant' },
-                { val: currentRun.review,        label: 'Review',   cls: 'metric-review'   },
-                { val: currentRun.noise,         label: 'Zaj',      cls: 'metric-noise'    },
-                { val: currentRun.total_raw,     label: 'Nyers',    cls: ''                },
-                { val: currentRun.total_unique,  label: 'Egyedi',   cls: ''                },
+                { val: currentRun.relevant,    label: 'Releváns', cls: 'metric-relevant' },
+                { val: currentRun.review,       label: 'Review',   cls: 'metric-review'   },
+                { val: currentRun.noise,        label: 'Zaj',      cls: 'metric-noise'    },
+                { val: currentRun.total_raw,    label: 'Nyers',    cls: ''                },
+                { val: currentRun.total_unique, label: 'Egyedi',   cls: ''                },
               ].map(m => (
                 <div key={m.label} className={`metric-card ${m.cls}`}>
                   <div className="metric-val">{m.val}</div>
@@ -533,7 +593,7 @@ export default function App() {
               ))}
             </div>
 
-            {/* Source distribution */}
+            {/* Forrás-eloszlás */}
             {summary.source_distribution?.length > 0 && (
               <div className="source-dist">
                 {summary.source_distribution.slice(0, 10).map(s => {
@@ -551,7 +611,7 @@ export default function App() {
               </div>
             )}
 
-            {/* ── Curator queue: REV cikkek ── */}
+            {/* ── Kurátor sor: felülvizsgálandó cikkek ── */}
             {visibleRevArticles.length > 0 && (
               <div className="curator-block">
                 <div className="section-label">
@@ -566,13 +626,35 @@ export default function App() {
                   {bulkMode ? (
                     <>
                       <span className="bulk-count">{selected.size} kijelölve</span>
-                      <button className="btn-bulk-action btn-bulk-all" onClick={selectAll}>Mindet</button>
-                      <button className="btn-bulk-action btn-bulk-rel" onClick={() => handleBulk('releváns')} disabled={!selected.size}>Releváns</button>
-                      <button className="btn-bulk-action btn-bulk-rej" onClick={() => handleBulk('nem_releváns')} disabled={!selected.size}>Elutasít</button>
-                      <button className="btn-bulk-toggle" onClick={() => { setBulkMode(false); setSelected(new Set()) }}>✕ Kilép</button>
+                      <button
+                        className="btn-bulk-action btn-bulk-all"
+                        onClick={selectAll}
+                        title="Az összes felülvizsgálandó cikk kijelölése"
+                      >Mindet</button>
+                      <button
+                        className="btn-bulk-action btn-bulk-rel"
+                        onClick={() => handleBulk('releváns')}
+                        disabled={!selected.size}
+                        title="A kijelölt cikkeket relevánsként jelöli meg"
+                      >Releváns</button>
+                      <button
+                        className="btn-bulk-action btn-bulk-rej"
+                        onClick={() => handleBulk('nem_releváns')}
+                        disabled={!selected.size}
+                        title="A kijelölt cikkeket nem relevánsként utasítja el"
+                      >Elutasítás</button>
+                      <button
+                        className="btn-bulk-toggle"
+                        onClick={() => { setBulkMode(false); setSelected(new Set()) }}
+                        title="Tömeges mód bezárása, kijelölés törlése"
+                      >✕ Kilép</button>
                     </>
                   ) : (
-                    <button className="btn-bulk-toggle" onClick={() => setBulkMode(true)}>Kijelöl</button>
+                    <button
+                      className="btn-bulk-toggle"
+                      onClick={() => setBulkMode(true)}
+                      title="Tömeges döntési mód bekapcsolása"
+                    >Kijelöl</button>
                   )}
                 </div>
                 <div className="queue-list">
@@ -591,15 +673,18 @@ export default function App() {
                         onClick={() => bulkMode
                           ? toggleSelect(a.article_id)
                           : isApproved ? handleUnreview(a.article_id) : handleReview(a.article_id, 'releváns')}
+                        title={bulkMode
+                          ? isSelected ? 'Kijelölés megszüntetése' : 'Kijelölés a tömeges döntéshez'
+                          : isApproved ? 'Kattints a jóváhagyás visszavonásához' : 'Kattints a relevánsként jelöléshez'}
                       >
                         <div className={`queue-check${bulkMode
                           ? isSelected ? ' selected' : ''
                           : isApproved ? ' checked' : isRejected ? ' rejected' : ''}`} />
                         <span
                           className="queue-score"
-                          title={a.score_reason || ''}
+                          title={a.score_reason ? 'Kattints a pontozás részleteiért' : ''}
                           onClick={e => { e.stopPropagation(); toggleExpand(a.article_id) }}
-                          style={{ cursor: 'help' }}
+                          style={{ cursor: a.score_reason ? 'help' : 'default' }}
                         >{a.score}</span>
                         <div className="queue-body">
                           <a
@@ -608,6 +693,7 @@ export default function App() {
                             rel="noopener noreferrer"
                             className="queue-title"
                             onClick={e => e.stopPropagation()}
+                            title="Megnyitja a cikket új lapon"
                           >{a.title}</a>
                           <span className="queue-meta">
                             {a.source} · {a.published_date_iso?.slice(5) ?? ''}
@@ -624,7 +710,7 @@ export default function App() {
                         {!bulkMode && (
                           <button
                             className="btn-reject-queue"
-                            title={isRejected ? 'Visszavon' : 'Nem releváns'}
+                            title={isRejected ? 'Visszavonja az elutasítást' : 'Nem releváns – elutasítja a cikket'}
                             onClick={e => {
                               e.stopPropagation()
                               isRejected ? handleUnreview(a.article_id) : handleReview(a.article_id, 'nem_releváns')
@@ -638,13 +724,17 @@ export default function App() {
               </div>
             )}
 
-            {/* ── Releváns pile → PDF ── */}
+            {/* ── Releváns cikkek → PDF ── */}
             {pdfArticles.length > 0 && (
               <div className="pdf-block">
                 <div className="section-label">
                   {revArticles.length > 0 ? 'Releváns — PDF' : 'Releváns'}
                   <span className="section-label-count">{pdfArticles.length}</span>
-                  <button className="btn-pdf" onClick={downloadPdf}>↓ PDF</button>
+                  <button
+                    className="btn-pdf"
+                    onClick={downloadPdf}
+                    title="Napi PDF letöltése a releváns cikkekkel"
+                  >↓ PDF</button>
                 </div>
 
                 <div className="articles-list">
@@ -655,15 +745,15 @@ export default function App() {
                       <div key={a.article_id} className="art-row art-rel">
                         <span
                           className="art-score"
-                          title={a.score_reason || ''}
+                          title={a.score_reason ? 'Kattints a pontozás részleteiért' : ''}
                           onClick={() => toggleExpand(a.article_id)}
-                          style={{ cursor: 'help' }}
+                          style={{ cursor: a.score_reason ? 'help' : 'default' }}
                         >{a.score}</span>
                         {isApprovedRev ? (
                           <button
                             className="art-cat art-cat-decided badge-completed"
                             onClick={() => handleUnreview(a.article_id)}
-                            title="Visszavon"
+                            title="Kattints a jóváhagyás visszavonásához"
                           >✓</button>
                         ) : (
                           <span className="art-cat badge-completed">REL</span>
@@ -675,6 +765,7 @@ export default function App() {
                             target="_blank"
                             rel="noopener noreferrer"
                             className="art-title"
+                            title="Megnyitja a cikket új lapon"
                           >{a.title}</a>
                           {isExpanded && a.score_reason && (
                             <div className="art-score-reason"><ScoreBreakdown reason={a.score_reason} /></div>
@@ -683,7 +774,7 @@ export default function App() {
                         <span className="art-date">{a.published_date_iso?.slice(0, 10) ?? ''}</span>
                         <button
                           className="btn-reject-rel"
-                          title="Nem releváns — eltávolít a PDF-ből"
+                          title="Nem releváns – eltávolítja a PDF-ből"
                           onClick={e => { e.stopPropagation(); handleReview(a.article_id, 'nem_releváns') }}
                         >✕</button>
                       </div>
@@ -695,19 +786,24 @@ export default function App() {
 
           </section>
         )}
-      </div>
+      </main>
 
-      {/* ── Manuális cikk modal ── */}
+      {/* ── Cikk hozzáadás modal ── */}
       {addModalOpen && (
         <div className="modal-overlay" onClick={() => setAddModalOpen(false)}>
           <div className="modal-box" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <span className="modal-title">Cikk hozzáadása</span>
-              <button className="modal-close" onClick={() => setAddModalOpen(false)}>✕</button>
+              <button
+                className="modal-close"
+                onClick={() => setAddModalOpen(false)}
+                title="Bezárja a modált mentés nélkül"
+                aria-label="Modal bezárása"
+              >✕</button>
             </div>
             <form className="modal-form" onSubmit={handleAddArticle}>
               <label className="modal-label">
-                URL *{metaLoading && <span style={{ fontWeight: 400, color: 'var(--fg-3)', marginLeft: 6 }}>adatok betöltése…</span>}
+                URL *{metaLoading && <span className="modal-label-note">adatok betöltése…</span>}
                 <input className="modal-input" type="url" required placeholder="https://..."
                   value={addForm.url}
                   onChange={e => setAddForm(f => ({ ...f, url: e.target.value }))}
@@ -740,8 +836,18 @@ export default function App() {
               </label>
               {addError && <div className="modal-error">{addError}</div>}
               <div className="modal-actions">
-                <button type="button" className="modal-btn-cancel" onClick={() => setAddModalOpen(false)}>Mégsem</button>
-                <button type="submit" className="modal-btn-submit" disabled={addLoading}>
+                <button
+                  type="button"
+                  className="modal-btn-cancel"
+                  onClick={() => setAddModalOpen(false)}
+                  title="Bezárja a modált mentés nélkül"
+                >Mégsem</button>
+                <button
+                  type="submit"
+                  className="modal-btn-submit"
+                  disabled={addLoading}
+                  title="Hozzáadja a cikket az aktuális futáshoz"
+                >
                   {addLoading ? 'Hozzáadás…' : 'Hozzáad'}
                 </button>
               </div>
