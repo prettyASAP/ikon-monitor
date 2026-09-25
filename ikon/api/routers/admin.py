@@ -23,9 +23,9 @@ def _check_auth(x_admin_secret: str | None) -> None:
 
 
 def _db_path() -> Path:
-    from ikon.api.dependencies import get_settings
-    cfg = get_settings()
-    return Path(cfg.db_path)
+    from ikon.api.dependencies import get_config
+    cfg = get_config()
+    return Path(cfg.storage.db_path)
 
 
 @router.get("/admin/backup-db")
