@@ -323,7 +323,8 @@ export default function App() {
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `ikon-${currentRun.run_id}.pdf`
+      const d = currentRun.run_id.slice(0, 8)
+      a.download = `Média_hírfigyelés_NAPI_${d.slice(0,4)}-${d.slice(4,6)}-${d.slice(6,8)}.pdf`
       a.click()
       setTimeout(() => URL.revokeObjectURL(url), 1000)
     } catch {
