@@ -90,10 +90,9 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    from ikon.api.routers import articles, admin, feedback, health, keywords, runs
+    from ikon.api.routers import articles, feedback, health, keywords, runs
 
     app.include_router(health.router)
-    app.include_router(admin.router)
     app.include_router(runs.router, prefix="/api/v1")
     app.include_router(articles.router, prefix="/api/v1")
     app.include_router(feedback.router, prefix="/api/v1")
