@@ -423,6 +423,13 @@ export default function App() {
           >
             {running ? '⟳  Futás folyamatban…' : '▶  Futás indítása'}
           </button>
+          {currentRun && !running && pdfArticles.length > 0 && (
+            <button
+              className="btn-pdf-hero"
+              onClick={downloadPdf}
+              title="Napi PDF letöltése a releváns cikkekkel"
+            >↓ PDF</button>
+          )}
         </div>
 
         <div className="ph-actions">
@@ -442,13 +449,6 @@ export default function App() {
                 </option>
               ))}
             </select>
-          )}
-          {currentRun && !running && pdfArticles.length > 0 && (
-            <button
-              className="btn-pdf-hero"
-              onClick={downloadPdf}
-              title="Napi PDF letöltése a releváns cikkekkel"
-            >↓ PDF</button>
           )}
           {currentRun && !running && (
             <button
