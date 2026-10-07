@@ -1,5 +1,7 @@
 # ikon-monitor
 
+[![tests](https://github.com/prettyASAP/ikon-monitor/actions/workflows/tests.yml/badge.svg)](https://github.com/prettyASAP/ikon-monitor/actions/workflows/tests.yml)
+
 Média-monitoring pipeline és webes felület egy televíziós műsorgyártó cég számára. Naponta, illetve hetente összegyűjti a magyar online sajtó releváns cikkeit, pontozza és három kategóriába sorolja őket (releváns, felülvizsgálandó, zaj), az elemző döntéseit pedig visszacsatolja a pontozásba.
 
 ## Hogyan működik
