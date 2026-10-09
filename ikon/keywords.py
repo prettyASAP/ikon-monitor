@@ -170,7 +170,8 @@ TV_REQUIRED_CONTEXT: dict[str, str] = {
     # NAPI profil – Life TV / Ozone TV / Media Vivantis
     # ---------------------------------------------------------------------------
     # T2: TV-személyek – Life TV/Ozone TV kontextus nélkül nem releváns
-    "Hajdú Péter":   r"(life\s*tv|lifetv|ozone|media\s+vivantis|műsorvezető|televízió|csatorn|műsor)",
+    # médiatanács|partizán|nmhh: médiahatósági/politikai kontextus (pl. Partizán-vizsgálat)
+    "Hajdú Péter":   r"(life\s*tv|lifetv|ozone|media\s+vivantis|műsorvezető|televízió|csatorn|műsor|médiatanács|partizán|nmhh|médiahatóság)",
     "Gáspár Győző":  r"(life\s*tv|lifetv|vacsora|celebkonyha|műsor|adás|televízió)",
     # T2: klasszikus sorozatcímek – csak ha Life TV-kontextusban kerülnek elő
     "Columbo":       r"(life\s*tv|lifetv|klasszikus\s+sorozat|televíziós\s+legenda|sorozat.*sugároz|visszatér|adás)",
