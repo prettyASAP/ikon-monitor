@@ -96,6 +96,54 @@ def save_raw_to_csv(articles: list[RawArticle], path: Path | str) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Scraping – Argus (primary) + hirkereso (1-hetes mérés)
+# ---------------------------------------------------------------------------
+
+def _scrape_articles(cfg: Config, keywords: "list[str] | None") -> "list[RawArticle]":
+    """Scraping logika: Argus elsődleges, hirkereso.hu mérőtartalék.
+
+    Ha ARGUS_API_KEY be van állítva:
+      - Argus lekérdezés (teljes szöveg, 103 forrás)
+      - hirkereso is fut ARGUS_SKIP_HIRKERESO=1 nélkül (1-hetes mérés)
+      - Argus cikkek előre kerülnek → dedup az Argus verziót választja (body megmarad)
+    Ha nincs ARGUS_API_KEY: hirkereso.hu (régi viselkedés).
+    """
+    import os
+    from ikon.scraper import scrape_all as hirkereso_scrape_all
+
+    api_key = os.environ.get("ARGUS_API_KEY")
+    if not api_key:
+        logger.info("ARGUS_API_KEY nincs beállítva → hirkereso.hu")
+        return hirkereso_scrape_all(cfg.scraping, keywords=keywords)
+
+    from ikon.argus_client import scrape_all as argus_scrape_all
+    argus_articles = argus_scrape_all(keywords, cfg.scraping.time_window_hours, api_key)
+    argus_urls = {a.url for a in argus_articles}
+
+    skip_hirkereso = os.environ.get("ARGUS_SKIP_HIRKERESO", "").strip() in ("1", "true", "yes")
+    if skip_hirkereso:
+        logger.info("Argus: %d cikk (hirkereso mérés kikapcsolva)", len(argus_articles))
+        return argus_articles
+
+    # Mérési fázis: hirkereso is fut, hogy lássuk mit nem talál az Argus
+    hirkereso_articles = hirkereso_scrape_all(cfg.scraping, keywords=keywords)
+    hirkereso_only = [a for a in hirkereso_articles if a.url not in argus_urls]
+
+    logger.info(
+        "Mérés | Argus=%d | hirkereso=%d | hirkereso-only=%d",
+        len(argus_articles), len(hirkereso_articles), len(hirkereso_only),
+    )
+    if hirkereso_only:
+        logger.info(
+            "Hirkereso-only forrásai: %s",
+            ", ".join(sorted({a.source for a in hirkereso_only})),
+        )
+
+    # Argus cikkek előre → dedup a body-s verziót választja
+    return argus_articles + hirkereso_articles
+
+
+# ---------------------------------------------------------------------------
 # Deduplikálás + pontozás
 # ---------------------------------------------------------------------------
 
@@ -120,7 +168,8 @@ def _deduplicate_and_score(
 
     scored: list[ScoredArticle] = []
     for url, group in groups.items():
-        rep = group[0]
+        # Ha több verzió van (Argus + hirkereso), a legtöbb body szöveggel rendelkezőt használjuk
+        rep = max(group, key=lambda a: len(a.body))
         matched_keywords = list(dict.fromkeys(a.matched_keyword for a in group))
 
         # Legjobb tier meghatározása
@@ -129,11 +178,11 @@ def _deduplicate_and_score(
 
         source_type = classify_source(rep.source)
         score_result = score_article(
-            matched_keywords, rep.title, rep.excerpt, rep.source, cfg.scoring
+            matched_keywords, rep.title, rep.excerpt, rep.source, cfg.scoring, body=rep.body
         )
         category, _ = categorize(
             score_result.score, source_type, matched_keywords,
-            rep.title, rep.excerpt, cfg.scoring
+            rep.title, rep.excerpt, cfg.scoring, body=rep.body
         )
 
         scored.append(ScoredArticle(
@@ -144,6 +193,7 @@ def _deduplicate_and_score(
             published_date=rep.published_date,
             published_time=rep.published_time,
             excerpt=rep.excerpt,
+            body=rep.body,
             matched_keywords=matched_keywords,
             best_tier=best_tier,
             score=score_result.score,
@@ -258,8 +308,7 @@ def run_pipeline(
             if from_cache:
                 raw_articles = load_from_csv(from_cache)
             else:
-                from ikon.scraper import scrape_all
-                raw_articles = scrape_all(cfg.scraping, keywords=keywords)
+                raw_articles = _scrape_articles(cfg, keywords)
 
                 # Nyers CSV mentése
                 from datetime import date

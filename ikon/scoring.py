@@ -33,41 +33,45 @@ from ikon.models import Category, SourceType
 # False positive detekció
 # ---------------------------------------------------------------------------
 
-def is_false_positive(keyword: str, title: str, excerpt: str) -> bool:
+def is_false_positive(keyword: str, title: str, excerpt: str, body: str = "") -> bool:
     """Meghatározza, hogy egy kulcsszó-egyezés valódi találat-e.
 
     Args:
         keyword: A hirkereso-n keresett kulcsszó.
         title:   A cikk eredeti (case-preserved) títele.
         excerpt: A cikk leadje (case-preserved).
+        body:    Teljes cikktartalom (Argus); csak TV_REQUIRED_CONTEXT ellenőrzéshez.
 
     Returns:
         True, ha az egyezés valószínűleg zaj (false positive).
     """
     text_original = f"{title} {excerpt}"
     text_lower = text_original.lower()
+    # body-t névkereséshez és TV-kontextushoz vonjuk be (teljes szöveg, argus_client 50K-ban limitálja)
+    extended_lower = text_lower + (" " + body.lower() if body else "")
 
-    # IKO-kulcsszavak: nagybetűs \bIKO\b jelenléte dönti el.
+    # IKO-kulcsszavak: nagybetűs \bIKO\b jelenléte dönti el (cím, lead vagy body).
     if keyword.upper().startswith("IKO"):
-        return not bool(re.search(r"\bIKO\b", text_original))
+        extended_original = text_original + (" " + body if body else "")
+        return not bool(re.search(r"\bIKO\b", extended_original))
 
     # TV T3/T2 magas-FP kulcsszavak: show-kontextus hiánya → FP (whitelist logika).
     if keyword in TV_REQUIRED_CONTEXT:
         required = TV_REQUIRED_CONTEXT[keyword]
-        if not re.search(required, text_lower, re.IGNORECASE):
+        if not re.search(required, extended_lower, re.IGNORECASE):
             return True
         # Személy-nevek: kontextus megvan, de a teljes névnek is meg kell jelennie
         if keyword in FULL_NAME_REQUIRED:
-            return not bool(re.search(re.escape(keyword), text_lower, re.IGNORECASE))
+            return not bool(re.search(re.escape(keyword), extended_lower, re.IGNORECASE))
         return False
 
     # Személy-nevek TV_REQUIRED_CONTEXT nélkül: teljes névalak kötelező
     if keyword in FULL_NAME_REQUIRED:
-        if not re.search(re.escape(keyword), text_lower, re.IGNORECASE):
+        if not re.search(re.escape(keyword), extended_lower, re.IGNORECASE):
             return True  # Frázis hiánya → FP
         # Frázis megvan → FALSE_POSITIVE_PATTERNS is ellenőrzendő
 
-    # Általános FP pattern-ek (blacklist logika).
+    # Általános FP pattern-ek (blacklist): csak cím+lead alapján (body véletlenszerű utalásokat tartalmazhat).
     patterns = FALSE_POSITIVE_PATTERNS.get(keyword, [])
     for pattern in patterns:
         if re.search(pattern, text_lower, re.IGNORECASE):
@@ -107,6 +111,7 @@ def score_article(
     excerpt: str,
     source: str,
     cfg: ScoringConfig,
+    body: str = "",
 ) -> ScoreResult:
     """Kiszámolja egy cikk relevancia pontszámát.
 
@@ -115,6 +120,7 @@ def score_article(
     - Tier2 egyezés: +cfg.tier2_base_score (FP esetén: +cfg.false_positive_penalty)
     - Tier3 egyezés: +cfg.tier3_base_score (bulvár forrástípusnál: -cfg.bulvar_tier3_penalty)
     - Kontextus bónusz: +cfg.context_bonus_per_word / szó, max cfg.context_bonus_cap
+      (csak ha van legalább egy nem-FP kulcsszóegyezés)
 
     Returns:
         ScoreResult(score=0..100, reason="ember által olvasható magyarázat")
@@ -122,10 +128,13 @@ def score_article(
     source_type = classify_source(source)
     score = 0
     parts: list[str] = []
+    has_genuine_match = False
 
     for kw in matched_keywords:
         tier = KEYWORD_TIER.get(kw, "tier3_generikus")
-        fp = is_false_positive(kw, title, excerpt)
+        fp = is_false_positive(kw, title, excerpt, body)
+        if not fp:
+            has_genuine_match = True
 
         if tier == "tier1_specifikus":
             pts = cfg.false_positive_penalty if fp else cfg.tier1_base_score
@@ -154,11 +163,13 @@ def score_article(
                 parts.append(f"{kw}(T3)+{pts}")
             score += pts
 
-    # Kontextus bónusz
+    # Kontextus bónusz csak valódi (nem FP) egyezés mellé jár.
+    # Különben a media-ipari közszavak a detektált hamis pozitívot
+    # a review/releváns küszöb fölé tolnák (T2 FP penalty 5, review = 8).
     text_lower = f"{title} {excerpt}".lower()
     ctx_hits = [w for w in CONTEXT_WORDS if w in text_lower]
     ctx_bonus = min(len(ctx_hits) * cfg.context_bonus_per_word, cfg.context_bonus_cap)
-    if ctx_hits:
+    if ctx_hits and has_genuine_match:
         score += ctx_bonus
         parts.append(f"ctx({','.join(ctx_hits[:4])})+{ctx_bonus}")
 
@@ -189,6 +200,7 @@ def categorize(
     title: str,
     excerpt: str,
     cfg: ScoringConfig,
+    body: str = "",
 ) -> tuple[Category, CategoryFlags]:
     """Meghatározza a kategóriát a pontszám és biztonsági hálók alapján.
 
@@ -202,7 +214,7 @@ def categorize(
     flags = CategoryFlags(
         has_tier1_keyword=any(
             KEYWORD_TIER.get(kw) == "tier1_specifikus"
-            and not is_false_positive(kw, title, excerpt)
+            and not is_false_positive(kw, title, excerpt, body)
             for kw in matched_keywords
         ),
         has_tier3_media_core=(

@@ -34,7 +34,7 @@ class ScoringConfig:
     tier2_base_score: int = 20
     tier3_base_score: int = 5
     false_positive_penalty: int = 2
-    tier2_false_positive_penalty: int = 8
+    tier2_false_positive_penalty: int = 5
     context_bonus_per_word: int = 2
     context_bonus_cap: int = 15
     bulvar_tier3_penalty: int = 3
@@ -94,7 +94,7 @@ def load_config(path: Optional[Path] = None) -> Config:
         tier2_base_score=s.get("tier2_base_score", 20),
         tier3_base_score=s.get("tier3_base_score", 5),
         false_positive_penalty=s.get("false_positive_penalty", 2),
-        tier2_false_positive_penalty=s.get("tier2_false_positive_penalty", 8),
+        tier2_false_positive_penalty=s.get("tier2_false_positive_penalty", 5),
         context_bonus_per_word=s.get("context_bonus_per_word", 2),
         context_bonus_cap=s.get("context_bonus_cap", 15),
         bulvar_tier3_penalty=s.get("bulvar_tier3_penalty", 3),

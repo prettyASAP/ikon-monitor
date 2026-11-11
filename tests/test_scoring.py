@@ -151,9 +151,33 @@ class TestScoreArticle:
         assert result_tabloid.score < result_media.score
 
     def test_context_words_add_bonus(self, cfg):
-        without_ctx = score_article(["producer"], "Egy producer nyilatkozott", "", "", cfg)
-        with_ctx = score_article(["producer"], "TV2 producer műsor adás sorozat televízi", "", "", cfg)
+        without_ctx = score_article(["nézettség"], "Nézettségi adatok", "", "", cfg)
+        with_ctx = score_article(["nézettség"], "TV2 nézettség műsor adás sorozat televízi", "", "", cfg)
         assert with_ctx.score > without_ctx.score
+
+    def test_false_positive_does_not_get_context_bonus(self, cfg):
+        # T1 FP + médiaipari közszavak ne lépje át a review küszöböt.
+        result = score_article(
+            ["IKO Műsorgyártó"],
+            "Ikonikus produkciós cég televíziós műsor csatorna adás sorozat",
+            "",
+            "",
+            cfg,
+        )
+        assert result.score == cfg.false_positive_penalty
+        assert result.score < cfg.thresholds.review
+        assert "ctx(" not in result.reason
+
+    def test_false_positive_tier2_stays_below_review_despite_context(self, cfg):
+        result = score_article(
+            ["IKO"],
+            "Az ikonikus vezető televíziós műsor csatorna adás sorozat produkció",
+            "",
+            "",
+            cfg,
+        )
+        assert result.score == cfg.tier2_false_positive_penalty
+        assert result.score < cfg.thresholds.review
 
     def test_context_bonus_capped(self, cfg):
         # Sok kontextus szó → max cfg.context_bonus_cap

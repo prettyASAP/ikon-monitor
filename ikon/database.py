@@ -30,6 +30,7 @@ MIGRATIONS: dict[int, Path] = {
     4: Path(__file__).parent.parent / "migrations" / "v004_keyword_profiles.sql",
     5: Path(__file__).parent.parent / "migrations" / "v005_cross_profile_keywords.sql",
     6: Path(__file__).parent.parent / "migrations" / "v006_tv2_hosts.sql",
+    7: Path(__file__).parent.parent / "migrations" / "v007_body_field.sql",
 }
 
 DDL = """
@@ -56,6 +57,7 @@ CREATE TABLE IF NOT EXISTS raw_articles (
     published_date   TEXT,
     published_time   TEXT,
     excerpt          TEXT,
+    body             TEXT DEFAULT '',
     matched_keyword  TEXT NOT NULL,
     keyword_tier     TEXT NOT NULL,
     scraped_at       TEXT NOT NULL,
@@ -72,6 +74,7 @@ CREATE TABLE IF NOT EXISTS articles (
     published_date   TEXT,
     published_time   TEXT,
     excerpt          TEXT,
+    body             TEXT DEFAULT '',
     matched_keywords TEXT,   -- JSON tömb
     best_tier        TEXT,
     score            INTEGER NOT NULL,
@@ -200,14 +203,17 @@ class Database:
         rows = [
             (
                 a.article_id, run_id, a.url, a.title, a.source,
-                a.published_date, a.published_time, a.excerpt,
+                a.published_date, a.published_time, a.excerpt, a.body,
                 a.matched_keyword, a.keyword_tier, a.scraped_at.isoformat(),
             )
             for a in articles
         ]
         self.conn.executemany(
             """INSERT OR IGNORE INTO raw_articles
-               VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+               (article_id, run_id, url, title, source,
+                published_date, published_time, excerpt, body,
+                matched_keyword, keyword_tier, scraped_at)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
             rows,
         )
         self.conn.commit()
@@ -230,7 +236,7 @@ class Database:
                 a.article_id, run_id, a.url, a.title, a.source,
                 a.source_type.value, a.published_date,
                 self._to_iso_date(a.published_date),
-                a.published_time, a.excerpt,
+                a.published_time, a.excerpt, a.body,
                 json.dumps(a.matched_keywords, ensure_ascii=False),
                 a.best_tier.value, a.score, a.score_reason,
                 a.category.value, a.scored_at.isoformat(),
@@ -241,10 +247,10 @@ class Database:
             """INSERT OR REPLACE INTO articles
                (article_id, run_id, url, title, source,
                 source_type, published_date, published_date_iso,
-                published_time, excerpt,
+                published_time, excerpt, body,
                 matched_keywords, best_tier, score, score_reason,
                 category, scored_at)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             rows,
         )
         self.conn.commit()

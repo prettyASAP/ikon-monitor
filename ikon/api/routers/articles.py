@@ -42,6 +42,7 @@ def _to_article_out(d: dict) -> ArticleOut:
         published_date_iso=d.get("published_date_iso"),
         published_time=d.get("published_time") or "",
         excerpt=d.get("excerpt") or "",
+        body=d.get("body") or "",
         matched_keywords=kws,
         best_tier=d.get("best_tier") or "",
         score=d.get("score") or 0,

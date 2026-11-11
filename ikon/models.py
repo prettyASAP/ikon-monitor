@@ -56,6 +56,7 @@ class RawArticle(BaseModel):
     published_date: str = Field(description="Megjelenés dátuma, 'YYYY.MM.DD' formátum")
     published_time: str = Field(default="", description="Megjelenés időpontja, 'HH:MM' formátum")
     excerpt: str = Field(default="", description="Lead / előzetes szöveg")
+    body: str = Field(default="", description="Teljes cikktartalom (Argus forrásból)")
     matched_keyword: str = Field(description="A hirkereso.hu keresőszó, amely ezt a cikket visszaadta")
     keyword_tier: str = Field(description="A kulcsszó tier-je (tier1/2/3)")
     scraped_at: datetime = Field(default_factory=datetime.utcnow)
@@ -83,6 +84,7 @@ class ScoredArticle(BaseModel):
     published_date: str
     published_time: str
     excerpt: str
+    body: str = ""
 
     matched_keywords: list[str] = Field(description="Összes kulcsszó, amely ezt a cikket visszaadta")
     best_tier: KeywordTier = Field(description="A legjobb (legspecifikusabb) tier az egyező kulcsszavak közül")

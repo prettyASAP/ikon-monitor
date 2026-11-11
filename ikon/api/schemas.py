@@ -40,6 +40,7 @@ class ArticleOut(BaseModel):
     published_date_iso: Optional[str] = None
     published_time: str
     excerpt: str
+    body: str = ""
     matched_keywords: List[str]
     best_tier: str
     score: int
