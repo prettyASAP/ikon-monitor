@@ -41,8 +41,8 @@ export const api = {
 
   feedback: {
     list:   (p = {})          => req(`${BASE}/feedback?${qs(p)}`),
-    submit: (articleId, body) => req(`${BASE}/feedback/${articleId}`, { method: 'POST', body }),
-    remove: (articleId)       => req(`${BASE}/feedback/${articleId}`, { method: 'DELETE' }),
+    submit: (articleId, body, runId) => req(`${BASE}/feedback/${articleId}?${qs({ run_id: runId })}`, { method: 'POST', body }),
+    remove: (articleId, runId)       => req(`${BASE}/feedback/${articleId}?${qs({ run_id: runId })}`, { method: 'DELETE' }),
     bulk:   (body, runId)     => req(`${BASE}/feedback/bulk${runId ? `?run_id=${runId}` : ''}`, { method: 'POST', body }),
   },
 

@@ -57,7 +57,7 @@ function useInterval(fn, ms, active = true) {
   }, [ms, active])
 }
 
-export default function App() {
+export default function App({ onBack }) {
   const [health, setHealth]                   = useState(null)
   const [keywords, setKeywords]               = useState([])
   const [currentLine, setCurrentLine]         = useState(null)
@@ -392,8 +392,10 @@ export default function App() {
       {/* ── Oldal fejléc ── */}
       <header className="page-header">
         <div className="ph-brand">
-          <span className="ph-title">IKON Monitor</span>
-          <span className="ph-sub">Napi sajtóelemzés</span>
+          {onBack
+            ? <button className="rp-link" onClick={onBack} title="Visszavisz a napi riporthoz">← Vissza a riporthoz</button>
+            : <span className="ph-title">IKON Monitor</span>}
+          <span className="ph-sub">Beállítások és részletes nézet</span>
         </div>
 
         <div className="ph-controls">
