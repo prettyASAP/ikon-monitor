@@ -64,7 +64,15 @@ def scrape_all(
     if not api_key:
         raise ValueError("ARGUS_API_KEY nincs beállítva")
 
-    active_keywords = keywords if keywords is not None else ALL_KEYWORDS
+    # Tier3 kulcsszavak kizárása: az Argus teljes cikktestben keres, ezért a
+    # túl általános tier3 szavak (műsor, média, otthon, sorozat…) tízezer
+    # irreleváns cikket hoznának be. Tier3 csak scoring-bónusz, nem keresési alap.
+    all_kws = keywords if keywords is not None else ALL_KEYWORDS
+    active_keywords = [
+        kw for kw in all_kws
+        if KEYWORD_TIER.get(kw, "tier3_generikus") != "tier3_generikus"
+    ]
+    logger.info("Argus keresés: %d kulcsszó (tier1+tier2, tier3 kizárva)", len(active_keywords))
     from_ts = int(time.time()) - time_window_hours * 3600
     headers = {"Authorization": f"Bearer {api_key}"}
 
