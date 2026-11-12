@@ -36,7 +36,12 @@ NEM TARTOZIK IDE:
 - Politikai hír (pl. interjút adott Magyar Péter), kivéve ha közvetlenül egy \
 médiumot érint (pl. csatorna eladása, médiatörvény, egy szerkesztőség ügye)
 - Minden más téma (sport, gazdaság, tudomány, közélet), ha nincs magyar \
-média- vagy tévés vonatkozása"""
+média- vagy tévés vonatkozása
+
+Ha a cikk magyar tévés szereplőről, műsorvezetőről, valóságshow-szereplőről \
+vagy tévéből, filmből ismert magyar hírességről szól, és bizonytalan vagy, \
+tartsd meg: egy kimaradt releváns hír nagyobb hiba, mint egy fölösleges. \
+Sportolóra és politikusra ez nem vonatkozik, ha nincs tévés szerepük."""
 
 
 def apply_ai_filter(
@@ -98,7 +103,7 @@ def _classify_batch(articles: list["ScoredArticle"], client) -> list[bool]:
     """Visszaad egy bool listát: True = megtartandó."""
     lines: list[str] = []
     for idx, a in enumerate(articles, 1):
-        excerpt = (a.excerpt or "")[:120].replace("\n", " ").strip()
+        excerpt = (a.excerpt or "")[:300].replace("\n", " ").strip()
         lines.append(f"{idx}. [{a.source}] {a.title}")
         if excerpt:
             lines.append(f"   {excerpt}")
