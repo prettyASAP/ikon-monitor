@@ -231,8 +231,8 @@ def _build_pdf(run: dict, articles: list[dict]) -> bytes:
     W = PAGE_W - 2 * MX
 
     start, end = _run_times(run)
-    label = "IKO NAPI SAJTÓFIGYELŐ" if run.get("keyword_profile") == "napi" else "IKO SAJTÓFIGYELŐ"
-    footer = f"{label.capitalize().replace('Iko', 'IKO')} · {end:%Y. %m. %d.}"
+    label = "Sajtófigyelés"
+    footer = f"{label} · {end:%Y. %m. %d.}"
     BLUE, BLUE_T = colors.HexColor("#2a78d6"), colors.HexColor("#E8F1FC")
 
     class NumberedCanvas(rl_canvas.Canvas):
@@ -268,7 +268,7 @@ def _build_pdf(run: dict, articles: list[dict]) -> bytes:
     s_exc = st("exc", fontSize=9.5, leading=13, textColor=BODY)
 
     buf = io.BytesIO()
-    doc = BaseDocTemplate(buf, pagesize=A4, title=label.capitalize().replace("Iko", "IKO"), author="IKO")
+    doc = BaseDocTemplate(buf, pagesize=A4, title=label, author="IKO")
     def top_stripe(c, _doc):
         c.saveState()
         c.setFillColor(BLUE)
