@@ -289,7 +289,7 @@ def _build_pdf(run: dict, articles: list[dict]) -> bytes:
     story: list = [
         Paragraph(label, s_label), Spacer(1, 4),
         Paragraph(heading, s_date), Spacer(1, 6),
-        Paragraph(f"{len(articles)} cikk, {run.get('total_unique') or 0} átnézett cikkből · {window}", s_run),
+        Paragraph(window, s_run),
         Spacer(1, 12),
     ]
     chart = _source_chart(articles, W, SANS, BOLD, BODY, INK, BLUE, BLUE_T)
