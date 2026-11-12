@@ -325,6 +325,21 @@ def run_pipeline(
             # 2.5 Embedding-alapú false-negative rescue
             scored_articles = _apply_embedding_rescue(scored_articles)
 
+            # 2.6 AI szűrő: külföldi/politikai/irreleváns cikkek kizárása
+            from ikon.models import Category as _Cat
+            ai_candidates = [
+                a for a in scored_articles
+                if a.effective_category in (_Cat.RELEVANT, _Cat.REVIEW)
+            ]
+            noise_passthrough = [
+                a for a in scored_articles
+                if a.effective_category == _Cat.NOISE
+            ]
+            if ai_candidates:
+                from ikon.ai_filter import apply_ai_filter
+                ai_kept = apply_ai_filter(ai_candidates)
+                scored_articles = ai_kept + noise_passthrough
+
             # 3. Feedback alkalmazása az adatbázisból
             feedback = db.load_feedback()
             if feedback:
