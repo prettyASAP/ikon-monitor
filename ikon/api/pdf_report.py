@@ -218,6 +218,7 @@ def _run_times(run: dict) -> tuple[datetime, datetime]:
 def _build_pdf(run: dict, articles: list[dict]) -> bytes:
     from reportlab.lib import colors
     from reportlab.lib.pagesizes import A4
+    from reportlab.lib.enums import TA_CENTER
     from reportlab.lib.styles import ParagraphStyle
     from reportlab.lib.units import mm
     from reportlab.pdfgen import canvas as rl_canvas
@@ -260,9 +261,9 @@ def _build_pdf(run: dict, articles: list[dict]) -> bytes:
     def st(name: str, **kw) -> ParagraphStyle:
         return ParagraphStyle(name, **{"fontName": SANS, **kw})
 
-    s_label = st("label", fontSize=8, leading=10, textColor=MUTED)
-    s_date = st("date", fontName=BOLD, fontSize=18, leading=22, textColor=INK)
-    s_run = st("run", fontSize=8.5, leading=11, textColor=MUTED)
+    s_label = st("label", fontName=BOLD, fontSize=26, leading=30, textColor=INK, alignment=TA_CENTER)
+    s_date = st("date", fontSize=12, leading=15, textColor=BODY, alignment=TA_CENTER)
+    s_run = st("run", fontSize=8.5, leading=11, textColor=MUTED, alignment=TA_CENTER)
     s_title = st("title", fontName=BOLD, fontSize=11.5, leading=14.5, textColor=INK)
     s_meta = st("meta", fontSize=8.5, leading=11, textColor=MUTED)
     s_exc = st("exc", fontSize=9.5, leading=13, textColor=BODY)
@@ -287,8 +288,8 @@ def _build_pdf(run: dict, articles: list[dict]) -> bytes:
               f"{HONAP_R[end.month - 1]} {end.day}. {end:%H:%M} között")
 
     story: list = [
-        Paragraph(label, s_label), Spacer(1, 4),
-        Paragraph(heading, s_date), Spacer(1, 6),
+        Spacer(1, 4), Paragraph(label, s_label), Spacer(1, 8),
+        Paragraph(heading, s_date), Spacer(1, 3),
         Paragraph(window, s_run),
         Spacer(1, 12),
     ]
