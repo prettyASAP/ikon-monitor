@@ -2,12 +2,13 @@
 PDF riport generálás – az ügyfélnek küldött napi sajtófigyelő.
 
 Tartalom: a riportba kerülő cikkek (feedback-kel korrigált kategória), pontszám szerinti
-sorrendben. Csak megjelenés: nincs gépi csoportosítás, összevonás vagy összefoglaló.
+sorrendben, hírenként a keresőszóval, amelyre bekerült. Csak megjelenés: nincs gépi csoportosítás, összevonás vagy összefoglaló.
 A4, egyhasábos, kattintható címek, rövid kivonat, oldalszám.
 """
 from __future__ import annotations
 
 import io
+import json
 import logging
 import os
 import re
@@ -68,7 +69,8 @@ def generate_run_pdf(conn: sqlite3.Connection, run_id: str) -> bytes:
     rows = conn.execute(
         """
         SELECT a.title, a.source, a.url, a.score,
-               a.published_date_iso, a.published_time, a.excerpt
+               a.published_date_iso, a.published_time, a.excerpt,
+               a.matched_keywords, a.score_reason
         FROM articles a
         LEFT JOIN feedback f ON a.url = f.url
         WHERE a.run_id = ?
@@ -123,6 +125,38 @@ def _excerpt(a: dict, limit: int = KIVONAT_MAX) -> str:
     if ends and ends[-1] > limit * 0.45:
         return cut[:ends[-1]]
     return cut[:cut.rfind(" ")].rstrip(",;:") + "…"
+
+
+_KW_PART = re.compile(r"^(?P<kw>.+?)\((?P<flags>[^)]*)\)")
+
+
+def _keywords(a: dict) -> list[str]:
+    """A keresőszavak, amelyekre a cikk bekerült: konkrétabb tier elöl, a tévesnek (FP) jelöltek nélkül.
+
+    A score_reason formátuma: „Sebestyén Balázs(T2)+20 | műsor(T3,bulvár)+2 | ctx(...)+4”.
+    """
+    found: list[tuple[int, int, str]] = []
+    for i, part in enumerate((a.get("score_reason") or "").split("|")):
+        m = _KW_PART.match(part.strip())
+        if not m or m.group("kw") == "ctx":
+            continue
+        flags = [f.strip() for f in m.group("flags").split(",")]
+        tier = next((int(f[1:]) for f in flags if re.fullmatch(r"T\d", f)), None)
+        if tier is None or "FP" in flags:
+            continue
+        found.append((tier, i, m.group("kw").strip()))
+    if (a.get("score_reason") or "").strip():
+        out: list[str] = []
+        for _, _, kw in sorted(found):
+            if kw not in out:
+                out.append(kw)
+        return out
+    raw = a.get("matched_keywords") or "[]"
+    try:
+        kws = json.loads(raw) if isinstance(raw, str) else list(raw)
+    except (TypeError, ValueError):
+        return []
+    return [str(k) for k in kws if k]
 
 
 def _short_date(a: dict) -> str:
@@ -217,7 +251,11 @@ def _build_pdf(run: dict, articles: list[dict]) -> bytes:
         block = [
             Paragraph(f'<link href="{_esc(a.get("url"))}">{_esc(a.get("title") or "Cím nélkül")}</link>', s_title),
             Spacer(1, 2),
-            Paragraph(" · ".join(x for x in (_esc(_source_name(a.get("source"))), _short_date(a)) if x), s_meta),
+            Paragraph(" · ".join(x for x in (
+                _esc(_source_name(a.get("source"))),
+                _short_date(a),
+                ("Keresőszó: " + _esc(", ".join(_keywords(a)))) if _keywords(a) else "",
+            ) if x), s_meta),
         ]
         exc = _excerpt(a)
         if exc:
