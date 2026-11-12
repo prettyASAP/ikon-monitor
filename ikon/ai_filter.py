@@ -4,7 +4,7 @@ Magyar tévéiparhoz nem kapcsolódó cikkeket szűr ki (külföldi hírek,
 politikai tartalom, véletlenszerű kulcsszóegyezések).
 
 Csak relevant+review kategóriára fut; ha ANTHROPIC_API_KEY hiányzik,
-kihagyja magát. Kb. $0.10/futás (1200 cikk, 25-ös batch).
+kihagyja magát. Haiku 5.5 ára $0.10/$0.50 per 1M token: futásonként centek.
 """
 from __future__ import annotations
 
@@ -18,25 +18,25 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _SYSTEM = """\
-Magyar televíziós műsorgyártó cég médiafigyelője szűr. Döntsd el, melyik cikk \
-releváns a MAGYAR tévéipar szempontjából.
+Egy magyar televíziós műsorgyártó cég (IKO Műsorgyártó: Life TV, Ozone TV, \
+Media Vivantis) médiafigyelőjének szűrője vagy. A cégnek a MAGYAR médiapiaccal \
+kapcsolatos hírek kellenek. Döntsd el cikkenként, hogy ide tartozik-e.
 
-BELEKERÜL:
-- Magyar tévécsatornák (Life TV, Ozone TV, RTL, TV2, Duna TV, stb.) műsorai, hírei
-- Magyar médiapiac: nézettség, reklámpiaci hírek, csatornák üzleti hírei
-- Magyar tévéiparban ismert személyek (műsorvezetők, tévészereplők) bulvárhírei — \
-válás, kapcsolat, botrány, interjú, pályafordulat
-- Filmfesztiválok, díjak, ha hazai produkció vagy hazai médium érintett
-- Produkciós cégek, gyártás, műsorstruktúra (ha Magyarországon)
+IDE TARTOZIK:
+- Magyar tévéműsorok, a saját és a konkurens csatornák műsorai (TV2, RTL, \
+Life TV, Ozone TV, Duna, ATV, Hír TV stb.), hírműsorok
+- Magyar filmek, sorozatok hírei és utóhírei, bemutatók, díjak
+- Bármely magyar tévénél dolgozó vagy korábban dolgozó műsorvezető, szereplő, \
+híresség bulvárhíre: válás, szerelmi élet, pletyka, botrány, pályaváltás
+- Magyar médiapiac: nézettség, reklámpiac, csatornák, produkciós cégek, \
+médiumok üzleti és szervezeti hírei
 
-NEM KERÜL BELE:
-- Külföldi hírek, amelyek nem érintik a magyar médiapiact (Guardian, BBC, stb.)
-- Politikai hírek (Magyar Péter, Orbán, pártok, választás) — kivéve ha \
-közvetlenül egy médiumot, csatornát érintenek
-- Külföldi celebek magánélete (nem hazai tévéhez kötve)
-- Külföldi streaming tartalmak (Netflix, HBO, Disney+) önmagukban
-- Sport, gazdasági, egészségügyi általános hírek
-- Külföldi sportesemények, tudományos hírek"""
+NEM TARTOZIK IDE:
+- Külföldi tartalom és sztár (pl. sikeres Netflix-sorozat, külföldi sztárpár válása)
+- Politikai hír (pl. interjút adott Magyar Péter), kivéve ha közvetlenül egy \
+médiumot érint (pl. csatorna eladása, médiatörvény, egy szerkesztőség ügye)
+- Minden más téma (sport, gazdaság, tudomány, közélet), ha nincs magyar \
+média- vagy tévés vonatkozása"""
 
 
 def apply_ai_filter(
@@ -45,8 +45,11 @@ def apply_ai_filter(
 ) -> list["ScoredArticle"]:
     """AI szűrő alkalmazása relevant+review cikkekre.
 
-    Ha ANTHROPIC_API_KEY nincs beállítva, az összes cikket visszaadja.
-    Ha egy batch hibába fut, azt a batch-t megtartja (fail-safe).
+    - Feedback-jelölt cikkeket (feedback_decision != None) kihagyja a szűrőből.
+    - Kizárt cikkek noise kategóriába kerülnek (nem törlődnek), score_reason-be
+      '[ai:kizárva]' kerül – utólag ellenőrizhetők.
+    - Ha ANTHROPIC_API_KEY hiányzik, az összes cikket változatlanul adja vissza.
+    - Ha egy batch hibába fut, azt a batch-t megtartja (fail-safe).
     """
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
@@ -60,24 +63,35 @@ def apply_ai_filter(
         logger.warning("AI szűrő: anthropic csomag nincs telepítve → kihagyva")
         return articles
 
-    kept: list[ScoredArticle] = []
+    from ikon.models import Category as _Cat
+
+    # Feedback-jelölt cikkeket nem adjuk AI-nak: a felhasználó döntése felülírja a modellét.
+    passthrough = [a for a in articles if a.feedback_decision is not None]
+    candidates = [a for a in articles if a.feedback_decision is None]
+
+    result: list[ScoredArticle] = list(passthrough)
     removed = 0
 
-    for i in range(0, len(articles), batch_size):
-        batch = articles[i : i + batch_size]
+    for i in range(0, len(candidates), batch_size):
+        batch = candidates[i : i + batch_size]
         keep_flags = _classify_batch(batch, client)
         for article, keep in zip(batch, keep_flags):
             if keep:
-                kept.append(article)
+                result.append(article)
             else:
                 removed += 1
                 logger.debug("AI kizárta: [%s] %s", article.source, article.title[:70])
+                # Noise-ba teszi, nem dobja el — a statisztika és az audit megmarad.
+                result.append(article.model_copy(update={
+                    "category": _Cat.NOISE,
+                    "score_reason": article.score_reason + " [ai:kizárva]",
+                }))
 
     logger.info(
-        "AI szűrő: %d cikkből %d maradt (%d kizárva)",
-        len(articles), len(kept), removed,
+        "AI szűrő: %d cikk (%d feedback-védett), %d kizárva noise-ba",
+        len(articles), len(passthrough), removed,
     )
-    return kept
+    return result
 
 
 def _classify_batch(articles: list["ScoredArticle"], client) -> list[bool]:
@@ -99,25 +113,34 @@ def _classify_batch(articles: list["ScoredArticle"], client) -> list[bool]:
     try:
         resp = client.messages.create(
             model="claude-haiku-5-5",
-            max_tokens=200,
+            # A Haiku 5.5 alapból gondolkodik, a gondolkodás is a max_tokens-be számít.
+            max_tokens=4000,
             system=_SYSTEM,
             messages=[{"role": "user", "content": prompt}],
         )
-        text = resp.content[0].text.strip()
+        if resp.stop_reason in ("refusal", "max_tokens"):
+            logger.warning("AI batch: stop_reason=%s — batch megtartva", resp.stop_reason)
+            return [True] * len(articles)
+        text = "".join(b.text for b in resp.content if b.type == "text").strip()
+        logger.info("AI batch tokenek: be %d, ki %d", resp.usage.input_tokens, resp.usage.output_tokens)
     except Exception as exc:
-        logger.warning("AI batch hiba (batch %d el): %s — batch megtartva", articles[0].title[:30], exc)
+        logger.warning("AI batch hiba ('%s'…): %s — batch megtartva", articles[0].title[:30], exc)
         return [True] * len(articles)
 
     if text.strip() == "-":
         return [False] * len(articles)
 
+    import re as _re
+    if not _re.fullmatch(r"[\d,.\s]+", text):
+        # Nem a kért formátum → fail-safe: minden cikk megmarad
+        logger.warning("AI szűrő: értelmezhetetlen válasz ('%s…') — batch megtartva", text[:60])
+        return [True] * len(articles)
+    numbers = _re.findall(r"\d+", text)
+
     keep_indices: set[int] = set()
-    for part in text.replace(" ", "").split(","):
-        # sorszám: pl. "3" vagy "3." ill. tartomány "3-5" nem kell, csak egyedi számok
-        part = part.rstrip(".")
-        if part.isdigit():
-            idx = int(part) - 1
-            if 0 <= idx < len(articles):
-                keep_indices.add(idx)
+    for n in numbers:
+        idx = int(n) - 1
+        if 0 <= idx < len(articles):
+            keep_indices.add(idx)
 
     return [i in keep_indices for i in range(len(articles))]

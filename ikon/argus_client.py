@@ -64,15 +64,7 @@ def scrape_all(
     if not api_key:
         raise ValueError("ARGUS_API_KEY nincs beállítva")
 
-    # Tier3 kulcsszavak kizárása: az Argus teljes cikktestben keres, ezért a
-    # túl általános tier3 szavak (műsor, média, otthon, sorozat…) tízezer
-    # irreleváns cikket hoznának be. Tier3 csak scoring-bónusz, nem keresési alap.
-    all_kws = keywords if keywords is not None else ALL_KEYWORDS
-    active_keywords = [
-        kw for kw in all_kws
-        if KEYWORD_TIER.get(kw, "tier3_generikus") != "tier3_generikus"
-    ]
-    logger.info("Argus keresés: %d kulcsszó (tier1+tier2, tier3 kizárva)", len(active_keywords))
+    active_keywords = keywords if keywords is not None else ALL_KEYWORDS
     from_ts = int(time.time()) - time_window_hours * 3600
     headers = {"Authorization": f"Bearer {api_key}"}
 
@@ -83,12 +75,14 @@ def scrape_all(
     with httpx.Client(timeout=30, follow_redirects=True) as client:
         for keyword in active_keywords:
             tier = KEYWORD_TIER.get(keyword, "tier3_generikus")
+            # match=phrase nélkül az Argus a szavakat külön, VAGY-gyal keresi.
+            params = {"q": keyword, "match": "phrase", "from": from_ts, "max": 500}
+            # Az általános tier3 szavak (műsor, otthon…) a cikktestben szinte mindenhol
+            # előfordulnak, ezért csak a címben keressük őket, ahogy a hirkereso.hu tette.
+            if tier == "tier3_generikus":
+                params["scope"] = "headline"
             try:
-                resp = client.get(
-                    ARGUS_URL,
-                    params={"q": keyword, "mode": "phrase", "from": from_ts, "max": 500},
-                    headers=headers,
-                )
+                resp = client.get(ARGUS_URL, params=params, headers=headers)
                 resp.raise_for_status()
                 data = resp.json()
             except httpx.HTTPStatusError as exc:
