@@ -51,25 +51,22 @@ function whenLabel(a) {
   return [a.source, [date, a.published_time].filter(Boolean).join(' ')].filter(Boolean).join(' · ')
 }
 
-function collectedLabel(run) {
+// A napi gyűjtés az előző nap 9:00-tól tart, hétfőn a péntek 9:00-tól (a szerver számolja).
+function periodLabel(run) {
   if (!run) return ''
-  const d = utc(run.started_at)
-  const time = d.toLocaleTimeString('hu-HU', { hour: '2-digit', minute: '2-digit' })
-  return sameDay(d, new Date()) ? `ma ${time}` : `${d.toLocaleDateString('hu-HU', { month: 'short', day: 'numeric' })} ${time}`
-}
-
-function readWindow() {
-  try { return Number(localStorage.getItem('ikon-ablak')) === 72 ? 72 : 24 } catch { return 24 }
+  const end = utc(run.started_at)
+  const start = run.window_start ? utc(run.window_start) : new Date(end - run.time_window_hours * 3600e3)
+  const fmt = d => (sameDay(d, new Date()) ? 'ma' : d.toLocaleDateString('hu-HU', { weekday: 'long' })) + ' ' +
+    d.toLocaleTimeString('hu-HU', { hour: '2-digit', minute: '2-digit' })
+  return `${fmt(start)} és ${fmt(end)} között`
 }
 
 export default function Riport({ onOpenSettings }) {
-  const [windowH, setWindowH] = useState(readWindow)
   const [run, setRun] = useState(null)
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(null)
   const [collecting, setCollecting] = useState(false)
-  const [dontesOpen, setDontesOpen] = useState(false)
   const [aiOpen, setAiOpen] = useState(false)
   const [openGroups, setOpenGroups] = useState(new Set())
   const [toast, setToast] = useState(null)
@@ -77,9 +74,6 @@ export default function Riport({ onOpenSettings }) {
   const saveQueue = useRef(Promise.resolve())
   const loadSeq = useRef(0)
   const saveCount = useRef(0)
-  const winSeq = useRef(0)
-  const windowRef = useRef(windowH)
-  windowRef.current = windowH
 
   useEffect(() => {
     try { document.documentElement.setAttribute('data-theme', localStorage.getItem('ikon-theme') === 'dark' ? 'dark' : 'light') } catch { /* nincs tároló */ }
@@ -91,8 +85,8 @@ export default function Riport({ onOpenSettings }) {
     toastTimer.current = setTimeout(() => setToast(null), opts.error ? 8000 : 5000)
   }, [])
 
-  const load = useCallback(async (win) => {
-    // Gyors Napi/3 napos váltásnál csak a legutolsó lekérés eredménye kerülhet a képernyőre.
+  const load = useCallback(async () => {
+    // Csak a legutolsó lekérés eredménye kerülhet a képernyőre.
     const seq = ++loadSeq.current
     const stale = () => seq !== loadSeq.current
     const savesAtStart = saveCount.current
@@ -104,7 +98,7 @@ export default function Riport({ onOpenSettings }) {
       for (let offset = 0; !latest; offset += 100) {
         const page = await api.runs.list({ limit: 100, offset, keyword_profile: PROFILE })
         if (offset === 0) runs = page.items ?? []
-        latest = (page.items ?? []).find(r => r.status === 'completed' && r.time_window_hours === win) ?? null
+        latest = (page.items ?? []).find(r => r.status === 'completed') ?? null
         if (!page.has_more) break
       }
       if (stale()) return
@@ -130,7 +124,7 @@ export default function Riport({ onOpenSettings }) {
       // Ha betöltés közben döntés született, a lekért adat elavult: megvárjuk a mentést és újrakérjük.
       await saveQueue.current
       if (stale()) return
-      if (saveCount.current !== savesAtStart) { load(win); return }
+      if (saveCount.current !== savesAtStart) { load(); return }
       setRun(latest)
       setItems(all)
     } catch (e) {
@@ -140,7 +134,7 @@ export default function Riport({ onOpenSettings }) {
     }
   }, [])
 
-  useEffect(() => { load(windowH) }, [windowH, load])
+  useEffect(() => { load() }, [load])
 
   useEffect(() => {
     if (!collecting) return
@@ -151,24 +145,13 @@ export default function Riport({ onOpenSettings }) {
           setCollecting(false)
           const done = runs[0]
           if (done?.status === 'failed') showToast('A gyűjtés hibával leállt. Próbáld újra később.', { error: true })
-          else showToast(`Elkészült a friss ${done?.time_window_hours === 72 ? '3 napos' : 'napi'} gyűjtés`)
-          load(windowH)
+          else showToast('Elkészült a friss gyűjtés')
+          load()
         }
       } catch { /* a következő körben újrapróbálja */ }
     }, 4000)
     return () => clearInterval(h)
-  }, [collecting, windowH, load, showToast])
-
-  const changeWindow = (w) => {
-    if (w === windowH) return
-    try { localStorage.setItem('ikon-ablak', String(w)) } catch { /* nincs tároló */ }
-    winSeq.current += 1
-    setToast(null)
-    setOpenGroups(new Set())
-    setRun(null)
-    setItems([])
-    setWindowH(w)
-  }
+  }, [collecting, load, showToast])
 
   // Döntés mentése: a felület azonnal vált, hiba esetén visszaáll.
   // A futásazonosító a döntés pillanatáé, hogy a visszavonás akkor is ugyanazt a futást célozza, ha közben új töltődött be.
@@ -194,7 +177,7 @@ export default function Riport({ onOpenSettings }) {
     } catch {
       // Nem a saját induló állapotunkra állunk vissza, mert közben későbbi döntés is születhetett: a szerver a mérvadó.
       showToast('Nem sikerült menteni a döntést. Ellenőrizd a kapcsolatot, és próbáld újra.', { error: true })
-      load(windowRef.current)
+      load()
     }
   }, [items, run, showToast, load])
 
@@ -206,7 +189,7 @@ export default function Riport({ onOpenSettings }) {
 
   const startCollect = async () => {
     try {
-      await api.runs.trigger({ triggered_by: 'ui', time_window_hours: windowH, keyword_profile: PROFILE })
+      await api.runs.trigger({ triggered_by: 'ui', keyword_profile: PROFILE, window: 'munkanap' })
       setCollecting(true)
       showToast('Elindult a gyűjtés, kb. 1-2 perc')
     } catch (e) {
@@ -220,12 +203,9 @@ export default function Riport({ onOpenSettings }) {
 
   const downloadPdf = async () => {
     if (!run) return
-    const seqAtClick = winSeq.current
     try {
       await saveQueue.current
-      if (winSeq.current !== seqAtClick) return
       const r = await fetch(`/api/v1/runs/${run.run_id}/pdf`)
-      if (winSeq.current !== seqAtClick) return
       if (!r.ok) throw new Error(r.statusText)
       const url = URL.createObjectURL(await r.blob())
       const a = document.createElement('a')
@@ -275,19 +255,17 @@ export default function Riport({ onOpenSettings }) {
             <h1>{heading}</h1>
             <div className="rp-sub">{loading || loadError ? ' ' : run ? `${riport.length} hír a riportban` : 'Ehhez az időszakhoz még nincs gyűjtés'}</div>
           </div>
-          <button className="rp-primary" onClick={downloadPdf} disabled={!run || riport.length === 0 || !!loadError} title="Letölti a riportban lévő híreket ügyfélnek küldhető PDF-ként">PDF letöltése</button>
+          <div className="rp-hero-actions">
+            <button className="rp-big" onClick={startCollect} disabled={collecting} title="Új gyűjtést indít az előző nap 9:00-tól (hétfőn péntek 9:00-tól), kb. 1-2 perc">{collecting ? 'Gyűjtés folyamatban…' : 'Frissítés'}</button>
+            <button className="rp-primary" onClick={downloadPdf} disabled={!run || riport.length === 0 || !!loadError} title="Letölti a riportban lévő híreket ügyfélnek küldhető PDF-ként">PDF letöltése</button>
+          </div>
         </div>
 
         <div className="rp-meta-row">
-          <div className="rp-seg" role="group" aria-label="Időszak">
-            <button className={windowH === 24 ? 'on' : ''} onClick={() => changeWindow(24)} title="Az elmúlt 24 óra híreit mutatja">Napi</button>
-            <button className={windowH === 72 ? 'on' : ''} onClick={() => changeWindow(72)} title="Az elmúlt 3 nap híreit mutatja, például hétfőn a hétvégéhez">3 napos</button>
-          </div>
-          <span>{collecting ? 'Gyűjtés folyamatban…' : run ? `Utolsó gyűjtés: ${collectedLabel(run)}` : ''}</span>
-          {!collecting && <button className="rp-link" onClick={startCollect} title="Új gyűjtést indít a kiválasztott időszakra, kb. 1-2 perc">Frissítés</button>}
+          <span>{run ? `Időszak: ${periodLabel(run)}` : ''}</span>
         </div>
 
-        {loadError && <div className="rp-notice"><span>{loadError}</span><button className="rp-secondary" onClick={() => load(windowH)} title="Újra betölti a riportot">Újra</button></div>}
+        {loadError && <div className="rp-notice"><span>{loadError}</span><button className="rp-secondary" onClick={() => load()} title="Újra betölti a riportot">Újra</button></div>}
 
         {loading && !items.length ? <div className="rp-empty">Betöltés…</div> : loadError ? null : !run ? (
           <div className="rp-panel"><div className="rp-empty">
@@ -295,22 +273,21 @@ export default function Riport({ onOpenSettings }) {
             <p style={{ marginTop: 12 }}><button className="rp-primary" onClick={startCollect} disabled={collecting} title="Új gyűjtést indít a kiválasztott időszakra">{collecting ? 'Gyűjtés folyamatban…' : 'Gyűjtés indítása'}</button></p>
           </div></div>
         ) : (<>
-          <div className={`rp-notice${dontes.length ? '' : ' done'}`}>
-            <span>{dontes.length ? `${dontes.length} hír a döntésedre vár` : 'Minden hírről döntöttél'}</span>
-            {dontes.length > 0 && <button className="rp-secondary" onClick={() => setDontesOpen(o => !o)} title="Megnyitja vagy becsukja a döntésre váró híreket">{dontesOpen ? 'Becsukom' : 'Átnézem'}</button>}
-          </div>
-          {dontesOpen && dontes.length > 0 && (
-            <div className="rp-panel">{dontes.map(a => (
-              <div className="rp-row" key={a.article_id}><div className="rp-body">
-                {titleLink(a)}<div className="rp-when">{whenLabel(a)}</div>
-                {a.excerpt && <div className="rp-lead">{a.excerpt}</div>}
-                <div className="rp-actions">
-                  <button className="rp-secondary" onClick={() => toRiport(a)} title="Beteszi a hírt a riportba">Riportba</button>
-                  <button className="rp-secondary" onClick={() => toKi(a)} title="Kihagyja a hírt a riportból">Kihagyom</button>
+          {dontes.length > 0 ? (<>
+            <p className="rp-label rp-label-warn">Döntésre vár · {dontes.length} hír</p>
+            <div className="rp-panel rp-panel-warn">{dontes.map(a => (
+              <div className="rp-row rp-row-zoned" key={a.article_id}>
+                <div className="rp-body">
+                  {titleLink(a)}<div className="rp-when">{whenLabel(a)}</div>
+                  {a.excerpt && <div className="rp-lead">{a.excerpt}</div>}
                 </div>
-              </div></div>
+                <div className="rp-zones">
+                  <button className="rp-zone rp-zone-ok" onClick={() => toRiport(a)} title="Beteszi a hírt a riportba"><span aria-hidden="true">✓</span>Riportba</button>
+                  <button className="rp-zone rp-zone-x" onClick={() => toKi(a)} title="Kihagyja a hírt, nem kerül a riportba"><span aria-hidden="true">×</span>Kihagyom</button>
+                </div>
+              </div>
             ))}</div>
-          )}
+          </>) : <p className="rp-quiet">Minden hírről döntöttél.</p>}
 
           <p className="rp-quiet">
             {ai.length} hírt kiszűrtünk, mert nem a magyar médiapiacról szól{ki.length ? `, ${ki.length} hírt te vettél ki` : ''}.{' '}
@@ -333,7 +310,7 @@ export default function Riport({ onOpenSettings }) {
               const sources = [...new Set(rest.map(r => r.source))]
               const toggle = () => setOpenGroups(s => { const n = new Set(s); n.has(a.article_id) ? n.delete(a.article_id) : n.add(a.article_id); return n })
               return (
-                <div className="rp-row" key={a.article_id}>
+                <div className="rp-row rp-row-zoned" key={a.article_id}>
                   <div className="rp-body">
                     {titleLink(a)}<div className="rp-when">{whenLabel(a)}</div>
                     {a.excerpt && <div className="rp-lead">{a.excerpt}</div>}
@@ -349,7 +326,9 @@ export default function Riport({ onOpenSettings }) {
                       ))}</ul>}
                     </div>}
                   </div>
-                  <button className="rp-x" onClick={() => toKi(a)} title="Kiveszi ezt a hírt a riportból, a téma többi cikke marad" aria-label="Kivesz">×</button>
+                  <div className="rp-zones">
+                    <button className="rp-zone rp-zone-x" onClick={() => toKi(a)} title="Kiveszi ezt a hírt a riportból, a téma többi cikke marad"><span aria-hidden="true">×</span>Kivesz</button>
+                  </div>
                 </div>
               )
             })}

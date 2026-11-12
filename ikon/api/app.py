@@ -116,6 +116,7 @@ def _run_pipeline_in_thread(
     run_id: str,
     time_window_hours: int = 168,
     keyword_profile: str = "iko_ceg",
+    window_start_ts: Optional[int] = None,
 ) -> None:
     """Szinkron függvény a ThreadPoolExecutor-ban fut.
 
@@ -138,7 +139,8 @@ def _run_pipeline_in_thread(
         import dataclasses as _dc
         effective_cfg = _dc.replace(
             cfg,
-            scraping=_dc.replace(cfg.scraping, time_window_hours=time_window_hours),
+            scraping=_dc.replace(cfg.scraping, time_window_hours=time_window_hours,
+                                 window_start_ts=window_start_ts),
         )
         run_pipeline(
             effective_cfg,

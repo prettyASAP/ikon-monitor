@@ -62,6 +62,7 @@ class RunOut(BaseModel):
     started_at: str
     completed_at: Optional[str] = None
     time_window_hours: int = 72
+    window_start: Optional[str] = None
     keyword_profile: str = "iko_ceg"
     total_raw: int = 0
     total_unique: int = 0
@@ -89,6 +90,10 @@ class RunCreateRequest(BaseModel):
     keyword_profile: str = Field(
         default="iko_ceg",
         description="Kulcsszó profil: 'iko_ceg' vagy 'tv_radio_musorok'"
+    )
+    window: Optional[str] = Field(
+        default=None,
+        description="'munkanap': az előző nap 9:00-tól (hétfőn péntek 9:00-tól); ilyenkor a time_window_hours számolt"
     )
 
 

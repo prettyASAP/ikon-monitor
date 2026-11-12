@@ -36,6 +36,7 @@ def _run_to_schema(run: dict) -> RunOut:
         started_at=run.get("started_at", ""),
         completed_at=run.get("completed_at"),
         time_window_hours=run.get("time_window_hours", 168),
+        window_start=run.get("window_start"),
         keyword_profile=run.get("keyword_profile") or "iko_ceg",
         total_raw=run.get("total_raw") or 0,
         total_unique=run.get("total_unique") or 0,
@@ -94,6 +95,13 @@ def trigger_run(
     run_id = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
     keyword_profile = body.keyword_profile
     time_window = body.time_window_hours
+    window_start = None
+    if body.window == "munkanap":
+        from ikon.idoablak import ablak_orak, munkanap_kezdet
+        window_start = munkanap_kezdet()
+        time_window = ablak_orak(window_start)
+    elif body.window is not None:
+        raise HTTPException(status_code=422, detail={"message": "Ismeretlen időablak", "code": "INVALID_WINDOW"})
     model = PipelineRun(
         run_id=run_id,
         time_window_hours=time_window,
@@ -112,8 +120,8 @@ def trigger_run(
             import dataclasses as _dc
             snap = json.dumps(_dc.asdict(cfg.scoring), ensure_ascii=False, default=str)
             db.conn.execute(
-                "UPDATE pipeline_runs SET triggered_by=?, config_snapshot=? WHERE run_id=?",
-                (body.triggered_by, snap, run_id),
+                "UPDATE pipeline_runs SET triggered_by=?, config_snapshot=?, window_start=? WHERE run_id=?",
+                (body.triggered_by, snap, window_start.isoformat() if window_start else None, run_id),
             )
             db.conn.commit()
     except HTTPException:
@@ -125,7 +133,8 @@ def trigger_run(
         )
 
     # 3. Háttérszálon futtatás (sync endpoint → közvetlen submit, nem asyncio)
-    get_executor().submit(_run_pipeline_in_thread, cfg, body.from_cache, run_id, time_window, keyword_profile)
+    get_executor().submit(_run_pipeline_in_thread, cfg, body.from_cache, run_id, time_window, keyword_profile,
+                          int(window_start.timestamp()) if window_start else None)
     logger.info("Pipeline indítva (run_id=%s, time_window=%dh, profile=%s, triggered_by=%s)", run_id, time_window, keyword_profile, body.triggered_by)
 
     return RunOut(
@@ -133,6 +142,7 @@ def trigger_run(
         status="running",
         started_at=model.started_at.isoformat(),
         time_window_hours=time_window,
+        window_start=window_start.isoformat() if window_start else None,
         keyword_profile=keyword_profile,
         triggered_by=body.triggered_by,
     )

@@ -58,7 +58,7 @@ def _register_fonts() -> tuple[str, str]:
 def generate_run_pdf(conn: sqlite3.Connection, run_id: str) -> bytes:
     """A riportba kerülő cikkek PDF exportja."""
     run = conn.execute(
-        "SELECT run_id, started_at, total_unique, time_window_hours,"
+        "SELECT run_id, started_at, total_unique, time_window_hours, window_start,"
         " COALESCE(keyword_profile, 'iko_ceg') AS keyword_profile"
         " FROM pipeline_runs WHERE run_id=?",
         (run_id,),
@@ -212,6 +212,11 @@ def _short_date(a: dict) -> str:
 def _run_times(run: dict) -> tuple[datetime, datetime]:
     """A futás vége és az időablak eleje budapesti időben (a started_at UTC)."""
     end = datetime.fromisoformat(run["started_at"]).replace(tzinfo=timezone.utc).astimezone(BUDAPEST)
+    if run.get("window_start"):
+        start = datetime.fromisoformat(run["window_start"])
+        if start.tzinfo is None:
+            start = start.replace(tzinfo=timezone.utc)
+        return start.astimezone(BUDAPEST), end
     return end - timedelta(hours=int(run.get("time_window_hours") or 24)), end
 
 
@@ -280,7 +285,8 @@ def _build_pdf(run: dict, articles: list[dict]) -> bytes:
         MX, MBOT, W, PAGE_H - MTOP - MBOT, id="main",
         leftPadding=0, rightPadding=0, topPadding=0, bottomPadding=0)], onPage=top_stripe)])
 
-    if (end - start) <= timedelta(hours=24):
+    # A munkanapos napi riport a gyűjtés napjáé, akkor is, ha az ablak hosszabb 24 óránál (hétfő)
+    if run.get("window_start") or (end - start) <= timedelta(hours=24):
         heading = f"{end.year}. {HONAP[end.month - 1]} {end.day}., {NAP[end.weekday()]}"
     else:
         heading = f"{start.year}. {HONAP[start.month - 1]} {start.day}. és {HONAP[end.month - 1]} {end.day}. között"

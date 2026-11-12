@@ -100,6 +100,43 @@ def save_raw_to_csv(articles: list[RawArticle], path: Path | str) -> None:
 # ---------------------------------------------------------------------------
 
 def _scrape_articles(cfg: Config, keywords: "list[str] | None") -> "list[RawArticle]":
+    """Gyűjtés, majd pontos ablakkezdet esetén a korábban megjelent cikkek kiszűrése.
+
+    A hirkereso csak egész órás időkorlátot ismer, ezért a 9:00 előtti cikkek itt esnek ki.
+    """
+    articles = _scrape_sources(cfg, keywords)
+    if cfg.scraping.window_start_ts is None:
+        return articles
+    kept = [a for a in articles if not _published_before(a, cfg.scraping.window_start_ts)]
+    if len(kept) != len(articles):
+        logger.info("Időablak: %d cikk kiszűrve (az ablak kezdete előtt jelent meg)", len(articles) - len(kept))
+    return kept
+
+
+def _published_before(article: "RawArticle", start_ts: int) -> bool:
+    """Igaz, ha a cikk biztosan az ablak kezdete előtt jelent meg (budapesti idő).
+
+    Ha a dátum hiányzik vagy nem értelmezhető, megtartjuk; ha csak a dátum ismert, napra vetjük össze.
+    """
+    from datetime import datetime
+    from ikon.idoablak import BUDAPEST
+
+    start = datetime.fromtimestamp(start_ts, BUDAPEST)
+    raw_date = (article.published_date or "").strip().replace("-", ".")
+    try:
+        day = datetime.strptime(raw_date[:10], "%Y.%m.%d").date()
+    except ValueError:
+        return False
+    if day != start.date():
+        return day < start.date()
+    try:
+        hh, mm = (int(x) for x in (article.published_time or "").strip()[:5].split(":"))
+    except ValueError:
+        return False
+    return (hh, mm) < (start.hour, start.minute)
+
+
+def _scrape_sources(cfg: Config, keywords: "list[str] | None") -> "list[RawArticle]":
     """Scraping logika: Argus elsődleges, hirkereso.hu mérőtartalék.
 
     Ha ARGUS_API_KEY be van állítva:
@@ -117,7 +154,8 @@ def _scrape_articles(cfg: Config, keywords: "list[str] | None") -> "list[RawArti
         return hirkereso_scrape_all(cfg.scraping, keywords=keywords)
 
     from ikon.argus_client import scrape_all as argus_scrape_all
-    argus_articles = argus_scrape_all(keywords, cfg.scraping.time_window_hours, api_key)
+    argus_articles = argus_scrape_all(keywords, cfg.scraping.time_window_hours, api_key,
+                                      from_ts=cfg.scraping.window_start_ts)
     argus_urls = {a.url for a in argus_articles}
 
     skip_hirkereso = os.environ.get("ARGUS_SKIP_HIRKERESO", "").strip() in ("1", "true", "yes")

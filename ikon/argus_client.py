@@ -48,6 +48,7 @@ def scrape_all(
     keywords: "list[str] | None" = None,
     time_window_hours: int = 168,
     api_key: Optional[str] = None,
+    from_ts: Optional[int] = None,
 ) -> list[RawArticle]:
     """Argus API lekérdezés az összes aktív kulcsszóra.
 
@@ -55,6 +56,7 @@ def scrape_all(
         keywords:          Keresendő kulcsszavak. None → ALL_KEYWORDS.
         time_window_hours: Visszatekintési ablak órában.
         api_key:           Argus Bearer token. None → ARGUS_API_KEY env var.
+        from_ts:           Pontos ablakkezdet (Unix mp); felülírja a time_window_hours-t.
 
     Returns:
         list[RawArticle] body mezővel feltöltve.
@@ -65,7 +67,8 @@ def scrape_all(
         raise ValueError("ARGUS_API_KEY nincs beállítva")
 
     active_keywords = keywords if keywords is not None else ALL_KEYWORDS
-    from_ts = int(time.time()) - time_window_hours * 3600
+    if from_ts is None:
+        from_ts = int(time.time()) - time_window_hours * 3600
     headers = {"Authorization": f"Bearer {api_key}"}
 
     seen: set[tuple[str, str]] = set()  # (url, keyword) – dedup

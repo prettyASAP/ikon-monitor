@@ -44,6 +44,8 @@ class ScoringConfig:
 @dataclass
 class ScrapingConfig:
     time_window_hours: int = 168
+    # Pontos ablakkezdet (Unix mp); ha meg van adva, az Argus ettől keres
+    window_start_ts: Optional[int] = None
     request_delay_seconds: float = 1.2
     request_timeout_seconds: int = 15
     base_url: str = "https://www.hirkereso.hu/search"

@@ -75,6 +75,38 @@ class TestPostRuns:
         assert run is not None
         assert run["status"] == "running"
 
+    def test_trigger_munkanap_window(self, api_client, db_conn):
+        from datetime import datetime
+        from ikon.repository import RunRepository
+
+        with patch("ikon.api.routers.runs._run_pipeline_in_thread") as th:
+            resp = api_client.post("/api/v1/runs", json={"triggered_by": "test", "keyword_profile": "napi", "window": "munkanap"})
+        assert resp.status_code == 202
+        body = resp.json()
+        start = datetime.fromisoformat(body["window_start"])
+        assert start.minute == 0 and body["time_window_hours"] >= 1
+        run = RunRepository(db_conn).get(body["run_id"])
+        assert run["window_start"] == body["window_start"]
+        assert api_client.get(f"/api/v1/runs/{body['run_id']}").json()["window_start"] == body["window_start"]
+
+    def test_trigger_unknown_window_422(self, api_client):
+        with patch("ikon.api.routers.runs._run_pipeline_in_thread"):
+            resp = api_client.post("/api/v1/runs", json={"window": "valami"})
+        assert resp.status_code == 422
+
+    def test_munkanap_kezdet_rules(self):
+        from datetime import datetime, timezone
+        from ikon.idoablak import BUDAPEST, ablak_orak, munkanap_kezdet
+
+        def at(s):
+            return datetime.fromisoformat(s).replace(tzinfo=BUDAPEST).astimezone(timezone.utc)
+        hetfo = munkanap_kezdet(at("2026-11-16T10:00")).astimezone(BUDAPEST)
+        assert (hetfo.strftime("%Y-%m-%d %H:%M"), hetfo.weekday()) == ("2026-11-13 09:00", 4)
+        kedd = munkanap_kezdet(at("2026-11-17T08:30")).astimezone(BUDAPEST)
+        assert kedd.strftime("%Y-%m-%d %H:%M") == "2026-11-16 09:00"
+        # óraátállítás: péntek 9:00 CET -> hétfő 10:00 CEST = 72 óra
+        assert ablak_orak(munkanap_kezdet(at("2026-03-30T10:00")), at("2026-03-30T10:00")) == 72
+
     def test_trigger_run_conflict_returns_409(self, api_client):
         with patch("ikon.api.routers.runs._run_pipeline_in_thread"):
             resp1 = api_client.post("/api/v1/runs", json={"triggered_by": "test"})

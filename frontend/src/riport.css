@@ -61,5 +61,30 @@
 
 @media (max-width: 600px) {
   .rp-hero h1 { font-size: 23px; }
-  .rp-hero .rp-primary { width: 100%; }
+}
+
+/* Fejléc: nagy Frissítés a PDF mellett */
+.rp-hero-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.rp-big { background: var(--panel); color: var(--text); border: 1px solid var(--border-strong); border-radius: var(--radius); padding: 11px 22px; font: inherit; font-weight: 600; cursor: pointer; }
+.rp-big:hover { border-color: var(--text-soft); }
+.rp-big:disabled { opacity: 0.6; cursor: default; }
+
+/* Döntésre váró blokk: mindig nyitva */
+.rp-label-warn { color: var(--rp-warn-text); }
+.rp-panel-warn { border-color: var(--rp-warn-border); }
+
+/* Sor jobb szélén teljes magasságú döntősáv: nagy, könnyen eltalálható felület */
+.rp-row-zoned { padding: 0; align-items: stretch; }
+.rp-row-zoned .rp-body { padding: 14px 16px; }
+.rp-zones { display: flex; flex: none; border-left: 1px solid var(--border); }
+.rp-zone { width: 92px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; background: none; border: none; color: var(--muted); font: inherit; font-size: 13px; cursor: pointer; }
+.rp-zone + .rp-zone { border-left: 1px solid var(--border); }
+.rp-zone span { font-size: 24px; line-height: 1; }
+.rp-zone-x:hover { background: color-mix(in srgb, var(--danger) 9%, transparent); color: var(--danger); }
+.rp-zone-ok:hover { background: var(--accent-soft); color: var(--accent-text); }
+
+@media (max-width: 600px) {
+  .rp-hero-actions { width: 100%; }
+  .rp-hero-actions > button { flex: 1; }
+  .rp-zone { width: 64px; font-size: 12px; }
 }
