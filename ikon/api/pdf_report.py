@@ -1,95 +1,74 @@
 """
-PDF riport generálás – kurátor export.
+PDF riport generálás – az ügyfélnek küldött napi sajtófigyelő.
 
-Tartalom: releváns cikkek a feedback-kel korrigált kategória szerint.
-Fehér hátterű, nyomtatható PDF (A4, reportlab platypus).
+Tartalom: a riportba kerülő cikkek (feedback-kel korrigált kategória), pontszám szerinti
+sorrendben. Csak megjelenés: nincs gépi csoportosítás, összevonás vagy összefoglaló.
+A4, egyhasábos, kattintható címek, rövid kivonat, oldalszám.
 """
 from __future__ import annotations
 
 import io
-import json
 import logging
 import os
+import re
 import sqlite3
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 logger = logging.getLogger(__name__)
 
+BUDAPEST = ZoneInfo("Europe/Budapest")
+HONAP = ["január", "február", "március", "április", "május", "június", "július",
+         "augusztus", "szeptember", "október", "november", "december"]
+HONAP_R = ["jan.", "febr.", "márc.", "ápr.", "máj.", "jún.", "júl.", "aug.", "szept.",
+           "okt.", "nov.", "dec."]
+NAP = ["hétfő", "kedd", "szerda", "csütörtök", "péntek", "szombat", "vasárnap"]
+KIVONAT_MAX = 220
 
-def _register_unicode_font() -> tuple[str, str]:
-    """Unicode betűtípust regisztrál a magyar karakterekhez.
 
-    Sorrendben próbálja: matplotlib DejaVu → macOS Arial → Helvetica fallback.
-    Visszaad (normal_name, bold_name) tuple-t.
-    """
+def _register_fonts() -> tuple[str, str]:
+    """Talp nélküli Unicode betűtípus (magyar ékezetek). Visszaad (normál, félkövér) nevet."""
     from reportlab.pdfbase import pdfmetrics
     from reportlab.pdfbase.ttfonts import TTFont
 
-    # 1) matplotlib DejaVu (legbiztonságosabb cross-platform)
+    candidates = [
+        ("/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+         "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"),
+        ("/System/Library/Fonts/Supplemental/Arial.ttf",
+         "/System/Library/Fonts/Supplemental/Arial Bold.ttf"),
+    ]
     try:
         import matplotlib
         base = os.path.join(os.path.dirname(matplotlib.__file__), "mpl-data", "fonts", "ttf")
-        reg  = os.path.join(base, "DejaVuSans.ttf")
-        bold = os.path.join(base, "DejaVuSans-Bold.ttf")
-        if os.path.exists(reg):
-            pdfmetrics.registerFont(TTFont("UniSans", reg))
-            if os.path.exists(bold):
-                pdfmetrics.registerFont(TTFont("UniSans-Bold", bold))
-                return "UniSans", "UniSans-Bold"
-            return "UniSans", "UniSans"
+        candidates.append((os.path.join(base, "DejaVuSans.ttf"), os.path.join(base, "DejaVuSans-Bold.ttf")))
     except Exception:
         pass
-
-    # 2) Linux rendszerfontek — fonts-liberation csomag (Docker image)
-    candidates = [
-        ("/usr/share/fonts/truetype/liberation/LiberationSerif-Regular.ttf", "LibSerif",
-         "/usr/share/fonts/truetype/liberation/LiberationSerif-Bold.ttf",    "LibSerif-Bold"),
-        ("/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",  "LibSans",
-         "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",     "LibSans-Bold"),
-        # macOS rendszerfontek
-        ("/System/Library/Fonts/Supplemental/Times New Roman.ttf", "TNR", "/System/Library/Fonts/Supplemental/Times New Roman Bold.ttf", "TNR-Bold"),
-        ("/Library/Fonts/Arial Unicode.ttf",         "SysArialUni", "/System/Library/Fonts/Supplemental/Arial Bold.ttf", "SysArialUni-Bold"),
-        ("/System/Library/Fonts/Supplemental/Arial Unicode.ttf", "SysArialUni2",
-         "/System/Library/Fonts/Supplemental/Arial Bold.ttf", "SysArialUni2-Bold"),
-        ("/Library/Fonts/Arial.ttf",                 "SysArial",    "/System/Library/Fonts/Supplemental/Arial Bold.ttf", "SysArial-Bold"),
-    ]
-    for reg_path, name, bold_path, bold_name in candidates:
-        if os.path.exists(reg_path):
+    for reg, bold in candidates:
+        if os.path.exists(reg) and os.path.exists(bold):
             try:
-                pdfmetrics.registerFont(TTFont(name, reg_path))
-                if os.path.exists(bold_path):
-                    try:
-                        pdfmetrics.registerFont(TTFont(bold_name, bold_path))
-                        return name, bold_name
-                    except Exception:
-                        pass
-                return name, name
+                pdfmetrics.registerFont(TTFont("IkonSans", reg))
+                pdfmetrics.registerFont(TTFont("IkonSans-Bold", bold))
+                return "IkonSans", "IkonSans-Bold"
             except Exception:
                 continue
-
-    # 3) Helvetica fallback
     return "Helvetica", "Helvetica-Bold"
 
 
 def generate_run_pdf(conn: sqlite3.Connection, run_id: str) -> bytes:
-    """Releváns cikkek PDF exportja."""
+    """A riportba kerülő cikkek PDF exportja."""
     run = conn.execute(
-        "SELECT run_id, started_at, relevant, review, noise, total_unique,"
-        " time_window_hours, COALESCE(keyword_profile, 'iko_ceg') AS keyword_profile"
+        "SELECT run_id, started_at, total_unique, time_window_hours,"
+        " COALESCE(keyword_profile, 'iko_ceg') AS keyword_profile"
         " FROM pipeline_runs WHERE run_id=?",
         (run_id,),
     ).fetchone()
     if not run:
         raise ValueError(f"Run nem található: {run_id}")
-    run_dict = dict(run)
 
     rows = conn.execute(
         """
         SELECT a.title, a.source, a.url, a.score,
-               a.published_date_iso, a.excerpt,
-               a.matched_keywords, a.score_reason,
-               COALESCE(f.decision, '') AS fb_decision,
-               COALESCE(f.reviewer_id, '') AS reviewer_id
+               a.published_date_iso, a.published_time, a.excerpt
         FROM articles a
         LEFT JOIN feedback f ON a.url = f.url
         WHERE a.run_id = ?
@@ -102,205 +81,151 @@ def generate_run_pdf(conn: sqlite3.Connection, run_id: str) -> bytes:
         (run_id,),
     ).fetchall()
 
-    sources = conn.execute(
-        """SELECT a.source, COUNT(*) AS cnt
-           FROM articles a
-           LEFT JOIN feedback f ON a.url = f.url
-           WHERE a.run_id = ?
-             AND (
-                 (f.decision IS NULL  AND a.category = 'releváns') OR
-                 f.decision = 'releváns'
-             )
-           GROUP BY a.source ORDER BY cnt DESC LIMIT 12""",
-        (run_id,),
-    ).fetchall()
-
-    articles = [dict(r) for r in rows]
-    source_dist = [dict(r) for r in sources]
-    profile = run_dict.get("keyword_profile", "iko_ceg")
-    return _build_pdf(run_dict, articles, source_dist, profile=profile)
+    # Ugyanaz az URL csak egyszer (ez nem tartalmi döntés, ugyanaz a cikk)
+    seen: set[str] = set()
+    articles = []
+    for r in rows:
+        a = dict(r)
+        if a["url"] in seen:
+            continue
+        seen.add(a["url"])
+        articles.append(a)
+    return _build_pdf(dict(run), articles)
 
 
-def _date_range_str(run: dict, profile: str = "iko_ceg") -> str:
+def _esc(s: str | None) -> str:
+    return (s or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def _source_name(s: str | None) -> str:
+    """„Blikk – aktuális” → „Blikk”: a rovatnév nem forrás."""
+    return re.split(r"\s+[–-]\s+", (s or "").strip())[0]
+
+
+_BYLINE = re.compile(
+    r"^[A-ZÁÉÍÓÖŐÚÜŰ][\wáéíóöőúüű.-]+(?: [A-ZÁÉÍÓÖŐÚÜŰ][\wáéíóöőúüű.-]+){1,3} "
+    r"\d{4}\. ?\d{1,2}\. ?\d{1,2}\.,? ?\w*\.? ?-? ?\d{1,2}:\d{2}\s*"
+)
+
+
+def _excerpt(a: dict, limit: int = KIVONAT_MAX) -> str:
+    """Rövid kivonat a forrás leadjéből: cím- és szerzősor nélkül, mondathatáron vágva."""
+    t = re.sub(r"\s+", " ", (a.get("excerpt") or "").strip())
+    title = (a.get("title") or "").strip()
+    if title and t.startswith(title):
+        t = t[len(title):].strip()
+    t = _BYLINE.sub("", t)
+    if len(t) <= limit:
+        return t
+    cut = t[:limit]
+    ends = [m.end() for m in re.finditer(
+        r"(?<![\dA-ZÁÉÍÓÖŐÚÜŰ])(?<!stb)(?<!kb)(?<!ill)[.!?…](?=\s+[\"„“A-ZÁÉÍÓÖŐÚÜŰ])", cut)]
+    if ends and ends[-1] > limit * 0.45:
+        return cut[:ends[-1]]
+    return cut[:cut.rfind(" ")].rstrip(",;:") + "…"
+
+
+def _short_date(a: dict) -> str:
     try:
-        started = datetime.fromisoformat(run["started_at"])
-        hours = int(run.get("time_window_hours") or 72)
-        if profile == "napi" or hours <= 24:
-            # Napi: csak az adott nap, YYYY-MM-DD formátum
-            return started.strftime("%Y-%m-%d")
-        from_dt = started - timedelta(hours=hours)
-        return f"{from_dt.strftime('%Y.%m.%d')} – {started.strftime('%Y.%m.%d')}"
-    except Exception:
-        return (run.get("started_at") or run["run_id"])[:10]
+        d = datetime.strptime((a.get("published_date_iso") or "")[:10], "%Y-%m-%d")
+    except ValueError:
+        return ""
+    s = f"{HONAP_R[d.month - 1]} {d.day}."
+    if a.get("published_time"):
+        s += f" {a['published_time']}"
+    return s
 
 
-def _source_chart(source_dist: list[dict], W: float, SANS: str, colors) -> object:
-    """Vízszintes sávdiagram a forrás-eloszláshoz reportlab Table+Drawing segítségével."""
-    from reportlab.platypus import Table, TableStyle
-    from reportlab.graphics.shapes import Drawing, Rect
-
-    if not source_dist:
-        return None
-
-    NAME_W = 88.0
-    CNT_W  = 24.0
-    BAR_W  = W - NAME_W - CNT_W - 8.0  # 8pt padding
-    max_cnt = max(s["cnt"] for s in source_dist)
-    BAR_CLR = colors.HexColor("#3b82f6")
-    TXT_CLR = colors.HexColor("#555555")
-
-    table_rows = []
-    for s in source_dist:
-        ratio  = s["cnt"] / max_cnt
-        filled = max(2.0, BAR_W * ratio)
-        d = Drawing(BAR_W, 8)
-        d.add(Rect(0, 1.5, filled, 4, fillColor=BAR_CLR, strokeColor=None))
-        table_rows.append([s["source"], d, str(s["cnt"])])
-
-    t = Table(table_rows, colWidths=[NAME_W, BAR_W, CNT_W])
-    t.setStyle(TableStyle([
-        ("FONTNAME",      (0, 0), (-1, -1), SANS),
-        ("FONTSIZE",      (0, 0), (-1, -1), 8),
-        ("TEXTCOLOR",     (0, 0), (0, -1),  TXT_CLR),
-        ("TEXTCOLOR",     (2, 0), (2, -1),  TXT_CLR),
-        ("ALIGN",         (0, 0), (0, -1),  "LEFT"),
-        ("ALIGN",         (2, 0), (2, -1),  "RIGHT"),
-        ("VALIGN",        (0, 0), (-1, -1), "MIDDLE"),
-        ("TOPPADDING",    (0, 0), (-1, -1), 3),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
-        ("LEFTPADDING",   (0, 0), (-1, -1), 0),
-        ("RIGHTPADDING",  (0, 0), (-1, -1), 0),
-    ]))
-    return t
+def _run_times(run: dict) -> tuple[datetime, datetime]:
+    """A futás vége és az időablak eleje budapesti időben (a started_at UTC)."""
+    end = datetime.fromisoformat(run["started_at"]).replace(tzinfo=timezone.utc).astimezone(BUDAPEST)
+    return end - timedelta(hours=int(run.get("time_window_hours") or 24)), end
 
 
-def _build_pdf(run: dict, articles: list[dict], source_dist: list[dict] | None = None, profile: str = "iko_ceg") -> bytes:
-    from reportlab.lib.pagesizes import A4
-    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    from reportlab.lib.units import cm
+def _build_pdf(run: dict, articles: list[dict]) -> bytes:
     from reportlab.lib import colors
-    from reportlab.platypus import (
-        Paragraph, Spacer, HRFlowable, Frame, PageTemplate, KeepTogether,
-    )
-    from reportlab.platypus.doctemplate import BaseDocTemplate
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.lib.units import mm
+    from reportlab.pdfgen import canvas as rl_canvas
+    from reportlab.platypus import (BaseDocTemplate, Frame, HRFlowable, KeepTogether,
+                                    PageTemplate, Paragraph, Spacer)
+
+    SANS, BOLD = _register_fonts()
+    INK, BODY, MUTED, FAINT = (colors.HexColor(c) for c in ("#111827", "#374151", "#6B7280", "#9CA3AF"))
+    PAGE_W, PAGE_H = A4
+    MX, MTOP, MBOT = 18 * mm, 16 * mm, 18 * mm
+    W = PAGE_W - 2 * MX
+
+    start, end = _run_times(run)
+    label = "IKO NAPI SAJTÓFIGYELŐ" if run.get("keyword_profile") == "napi" else "IKO SAJTÓFIGYELŐ"
+    footer = f"{label.capitalize().replace('Iko', 'IKO')} · {end:%Y. %m. %d.}"
+
+    class NumberedCanvas(rl_canvas.Canvas):
+        """Lábléc „oldal / összes” számozással (két menetben)."""
+
+        def __init__(self, *a, **k):
+            super().__init__(*a, **k)
+            self._pages: list[dict] = []
+
+        def showPage(self):
+            self._pages.append(dict(self.__dict__))
+            self._startPage()
+
+        def save(self):
+            n = len(self._pages)
+            for state in self._pages:
+                self.__dict__.update(state)
+                self.setFont(SANS, 8)
+                self.setFillColor(FAINT)
+                self.drawString(MX, 10 * mm, footer)
+                self.drawRightString(PAGE_W - MX, 10 * mm, f"{self._pageNumber} / {n}")
+                super().showPage()
+            super().save()
+
+    def st(name: str, **kw) -> ParagraphStyle:
+        return ParagraphStyle(name, **{"fontName": SANS, **kw})
+
+    s_label = st("label", fontSize=8, leading=10, textColor=MUTED)
+    s_date = st("date", fontName=BOLD, fontSize=18, leading=22, textColor=INK)
+    s_run = st("run", fontSize=8.5, leading=11, textColor=MUTED)
+    s_title = st("title", fontName=BOLD, fontSize=11.5, leading=14.5, textColor=INK)
+    s_meta = st("meta", fontSize=8.5, leading=11, textColor=MUTED)
+    s_exc = st("exc", fontSize=9.5, leading=13, textColor=BODY)
 
     buf = io.BytesIO()
-    PAGE_W, PAGE_H = A4
-    ML, MR, MT, MB = 2.2 * cm, 2.2 * cm, 2.2 * cm, 1.8 * cm
-    W = PAGE_W - ML - MR
+    doc = BaseDocTemplate(buf, pagesize=A4, title=label.capitalize().replace("Iko", "IKO"), author="IKO")
+    doc.addPageTemplates([PageTemplate(frames=[Frame(
+        MX, MBOT, W, PAGE_H - MTOP - MBOT, id="main",
+        leftPadding=0, rightPadding=0, topPadding=0, bottomPadding=0)])])
 
-    SANS, SANS_BOLD = _register_unicode_font()
+    if (end - start) <= timedelta(hours=24):
+        heading = f"{end.year}. {HONAP[end.month - 1]} {end.day}., {NAP[end.weekday()]}"
+    else:
+        heading = f"{start.year}. {HONAP[start.month - 1]} {start.day}. és {HONAP[end.month - 1]} {end.day}. között"
+    window = (f"{HONAP_R[start.month - 1]} {start.day}. {start:%H:%M} és "
+              f"{HONAP_R[end.month - 1]} {end.day}. {end:%H:%M} között")
 
-    base = getSampleStyleSheet()["Normal"]
-    base.fontName = SANS
+    story: list = [
+        Paragraph(label, s_label), Spacer(1, 4),
+        Paragraph(heading, s_date), Spacer(1, 6),
+        Paragraph(f"{len(articles)} cikk, {run.get('total_unique') or 0} átnézett cikkből · {window}", s_run),
+        Spacer(1, 8), HRFlowable(width="100%", thickness=0.75, color=INK, spaceAfter=14),
+    ]
 
-    def ps(name, **kw):
-        return ParagraphStyle(name, parent=base, **kw)
-
-    from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY, TA_LEFT
-
-    H1_CLR   = colors.HexColor("#111111")
-    MUTED    = colors.HexColor("#555555")
-    LINK_CLR = colors.HexColor("#0366d6")
-    GRAY     = colors.HexColor("#6a737d")
-    DIV_CLR  = colors.HexColor("#e1e4e8")
-    KW_CLR   = colors.HexColor("#0550ae")
-
-    SZ = 12        # alap betűméret
-    LD = SZ * 1.5  # 18pt vezérsor (1.5-ös sorköz)
-
-    title_st = ps("H1",  fontSize=14, leading=21, fontName=SANS_BOLD, textColor=H1_CLR,
-                  alignment=TA_CENTER, spaceAfter=4)
-    sub_st   = ps("Sub", fontSize=SZ, leading=LD, fontName=SANS,      textColor=MUTED,
-                  alignment=TA_CENTER, spaceAfter=14)
-    sect_st  = ps("Sec", fontSize=SZ, leading=LD, fontName=SANS_BOLD, textColor=H1_CLR,
-                  alignment=TA_LEFT,   spaceBefore=16, spaceAfter=6)
-    art_tit  = ps("AT",  fontSize=SZ, leading=LD, fontName=SANS_BOLD, textColor=LINK_CLR,
-                  alignment=TA_JUSTIFY, spaceAfter=2)
-    art_meta = ps("AM",  fontSize=SZ, leading=LD, fontName=SANS,      textColor=MUTED,
-                  alignment=TA_LEFT,   spaceAfter=2)
-    art_kw   = ps("AK",  fontSize=SZ, leading=LD, fontName=SANS,      textColor=KW_CLR,
-                  alignment=TA_LEFT,   spaceAfter=2)
-    art_exc  = ps("AE",  fontSize=SZ, leading=LD, fontName=SANS,      textColor=GRAY,
-                  alignment=TA_JUSTIFY, spaceAfter=10)
-
-    # Oldalszámozás nélküli frame
-    frame = Frame(ML, MB, W, PAGE_H - MT - MB, id="main")
-    tmpl  = PageTemplate(id="std", frames=[frame])
-    doc   = BaseDocTemplate(
-        buf, pagesize=A4, pageTemplates=[tmpl],
-        leftMargin=ML, rightMargin=MR, topMargin=MT, bottomMargin=MB,
-    )
-
-    story: list = []
-
-    src_lbl  = ps("SL", fontSize=SZ, leading=LD, fontName=SANS_BOLD, textColor=H1_CLR,
-                  alignment=TA_LEFT, spaceBefore=12, spaceAfter=5)
-
-    # ── Fejléc ──────────────────────────────────────────────────────────────
-    pdf_title = "Napi sajtóelemzés" if profile == "napi" else "IKO Sajtóelemzés"
-    story.append(Paragraph(pdf_title, title_st))
-    story.append(Paragraph(_date_range_str(run, profile=profile), sub_st))
-    story.append(HRFlowable(width="100%", thickness=0.5, color=DIV_CLR))
-
-    # ── Forrás-eloszlás ─────────────────────────────────────────────────────
-    if source_dist:
-        story.append(Paragraph("FORRÁSOK", src_lbl))
-        chart = _source_chart(source_dist, W, SANS, colors)
-        if chart:
-            story.append(chart)
-        story.append(Spacer(1, 0.25 * cm))
-        story.append(HRFlowable(width="100%", thickness=0.5, color=DIV_CLR))
-
-    # ── Cikklista ───────────────────────────────────────────────────────────
-    story.append(Paragraph(f"Hírek — {len(articles)} db", sect_st))
-
-    def esc(s: str) -> str:
-        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-
-    def _visible_keywords(kws: list, score_reason: str) -> list:
-        """FP-ként jelölt kulcsszavakat kiszűri a megjelenítésből.
-        A score_reason 'kulcsszó(FP,Tx)+N' formátumot használ."""
-        if not score_reason or not kws:
-            return kws
-        fp_set: set = set()
-        for part in score_reason.split(" | "):
-            part = part.strip()
-            if "(FP," in part:
-                fp_set.add(part.split("(")[0].strip())
-        return [kw for kw in kws if kw not in fp_set]
-
-    for art in articles:
-        raw_title = art.get("title")   or "—"
-        source    = art.get("source")  or ""
-        url       = art.get("url")     or ""
-        date      = (art.get("published_date_iso") or "")[:10]
-        excerpt   = art.get("excerpt") or ""
-        fb        = art.get("fb_decision") or ""
-
-        raw_kws = art.get("matched_keywords") or "[]"
-        score_reason = art.get("score_reason") or ""
-        try:
-            kws = json.loads(raw_kws) if isinstance(raw_kws, str) else raw_kws
-        except (json.JSONDecodeError, TypeError):
-            kws = []
-        kws = _visible_keywords(kws, score_reason)
-
-        block = [Paragraph(
-            f'<link href="{esc(url)}">{esc(raw_title)}</link>',
-            art_tit,
-        )]
-        block.append(Paragraph(f"{esc(source)}  ·  {date}", art_meta))
-        if kws:
-            kw_str = "  ".join(f"[{esc(k)}]" for k in kws[:6])
-            block.append(Paragraph(kw_str, art_kw))
-        if excerpt:
-            block.append(Paragraph(esc(excerpt), art_exc))
-        story.append(KeepTogether(block))
-        story.append(HRFlowable(width="100%", thickness=0.3, color=DIV_CLR))
+    for a in articles:
+        block = [
+            Paragraph(f'<link href="{_esc(a.get("url"))}">{_esc(a.get("title") or "Cím nélkül")}</link>', s_title),
+            Spacer(1, 2),
+            Paragraph(" · ".join(x for x in (_esc(_source_name(a.get("source"))), _short_date(a)) if x), s_meta),
+        ]
+        exc = _excerpt(a)
+        if exc:
+            block += [Spacer(1, 3), Paragraph(_esc(exc), s_exc)]
+        story += [KeepTogether(block), Spacer(1, 12)]
 
     if not articles:
-        story.append(Paragraph("Nincs releváns cikk ebben a futásban.", art_exc))
+        story.append(Paragraph("Ebben az időszakban nem volt a riportba illő cikk.", s_exc))
 
-    doc.build(story)
+    doc.build(story, canvasmaker=NumberedCanvas)
     return buf.getvalue()
