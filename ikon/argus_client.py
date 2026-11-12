@@ -109,7 +109,8 @@ def scrape_all(
                 src = item.get("source") or {}
                 source_name = src.get("name", "") if isinstance(src, dict) else ""
 
-                raw_pub = item.get("published_at") or item.get("published") or ""
+                # A published_at Unix-szám, a published ISO-szöveg: az utóbbit tudjuk értelmezni.
+                raw_pub = item.get("published") or ""
                 pub_date, pub_time = _parse_pub_date(raw_pub)
 
                 articles.append(RawArticle(
