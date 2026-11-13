@@ -72,3 +72,19 @@ def test_pdf_includes_undecided_review_and_groups(db_conn):
         generate_run_pdf(db_conn, "RUNP1")
     ids = [a["article_id"] for a in captured["a"]]
     assert ids == ["r1", "v1"]
+
+
+def test_html_not_cached():
+    # A felület HTML-je ne kerüljön gyorsítótárba (új verzió után a régi felület ne maradjon)
+    from fastapi.responses import HTMLResponse, JSONResponse
+    from fastapi.testclient import TestClient
+    from starlette.routing import Route
+
+    from ikon.api.app import create_app
+
+    app = create_app()
+    app.router.routes.insert(0, Route("/__html", lambda r: HTMLResponse("<p>x</p>")))
+    app.router.routes.insert(0, Route("/__json", lambda r: JSONResponse({"ok": True})))
+    c = TestClient(app)
+    assert c.get("/__html").headers.get("cache-control") == "no-cache"
+    assert "cache-control" not in c.get("/__json").headers

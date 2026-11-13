@@ -98,6 +98,15 @@ def create_app() -> FastAPI:
     app.include_router(feedback.router, prefix="/api/v1")
     app.include_router(keywords.router, prefix="/api/v1")
 
+    # A HTML (index.html) mindig frissen töltődjön, különben a böngésző a régi felületet adja elő.
+    # A JS/CSS fájlok neve tartalom szerinti hash, ezek nyugodtan gyorsítótárazhatók.
+    @app.middleware("http")
+    async def _no_cache_html(request, call_next):
+        response = await call_next(request)
+        if response.headers.get("content-type", "").startswith("text/html"):
+            response.headers["Cache-Control"] = "no-cache"
+        return response
+
     # Statikus frontend serving (production: Dockerfile buildeli be)
     _dist = Path(__file__).parent.parent.parent / "frontend" / "dist"
     if _dist.exists():

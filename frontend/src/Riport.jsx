@@ -61,6 +61,9 @@ export default function Riport({ onOpenSettings }) {
   const [toast, setToast] = useState(null)
   const toastTimer = useRef(null)
   const saveQueue = useRef(Promise.resolve())
+  const lastActivity = useRef(Date.now())
+  const toastShown = useRef(false)
+  const pdfBusy = useRef(false)
   const loadSeq = useRef(0)
   const saveCount = useRef(0)
 
@@ -68,8 +71,17 @@ export default function Riport({ onOpenSettings }) {
     try { document.documentElement.setAttribute('data-theme', localStorage.getItem('ikon-theme') === 'dark' ? 'dark' : 'light') } catch { /* nincs tároló */ }
   }, [])
 
+  useEffect(() => { toastShown.current = !!toast }, [toast])
+  useEffect(() => {
+    const mark = () => { lastActivity.current = Date.now() }
+    const evs = ['pointerdown', 'keydown', 'wheel', 'scroll', 'touchmove']
+    evs.forEach(e => window.addEventListener(e, mark, { passive: true, capture: true }))
+    return () => evs.forEach(e => window.removeEventListener(e, mark, { capture: true }))
+  }, [])
+
   const showToast = useCallback((msg, opts = {}) => {
     clearTimeout(toastTimer.current)
+    toastShown.current = true
     setToast({ msg, ...opts })
     toastTimer.current = setTimeout(() => setToast(null), opts.error ? 8000 : 5000)
   }, [])
@@ -140,6 +152,38 @@ export default function Riport({ onOpenSettings }) {
     const t = setInterval(() => setNow(Date.now()), 1000)
     return () => clearInterval(t)
   }, [collecting])
+
+  // Újratöltés csak nyugalmi állapotban: nincs kint üzenet (Visszavon, hiba), minden mentés lefutott
+  // (a várakozás közben indultak is), és a lap rejtett vagy 5 perce nem nyúltak hozzá.
+  // force: a Frissítés gomb után azonnal (üzenettől függetlenül), hogy a futásjelző már az új felületen menjen.
+  const reloadWhenCalm = useCallback(async (force) => {
+    const calm = () => !pdfBusy.current && (force || (!toastShown.current && (document.hidden || Date.now() - lastActivity.current >= 300000)))
+    // A Frissítés utáni kényszerített újratöltés egy futó PDF-letöltést megvár (legfeljebb 2 percig)
+    for (let i = 0; force && pdfBusy.current && i < 400; i++) await new Promise(r => setTimeout(r, 300))
+    if (!calm()) return
+    let q
+    do { q = saveQueue.current; await q } while (q !== saveQueue.current)
+    await new Promise(r => setTimeout(r, 0))   // a mentési hiba üzenete előbb kerüljön ki
+    if (calm()) window.location.reload()
+  }, [])
+
+  // Van-e élesben újabb felület, mint ami ebben a lapban fut (a JS fájl neve tartalom szerinti hash).
+  const checkNewVersion = useCallback(async () => {
+    const mine = document.querySelector('script[type="module"][src*="assets/index-"]')?.getAttribute('src')
+    if (!mine) return false   // fejlesztői szerver
+    try {
+      const html = await (await fetch('/', { cache: 'no-store' })).text()
+      const live = html.match(/assets\/index-[^"']+\.js/)?.[0]
+      return !!live && !mine.endsWith(live)
+    } catch { return false }
+  }, [])
+
+  // Ha közben új verzió került élesbe, a nyitott lap magától újratölt (a mentések megvárásával),
+  // különben a régi felület maradna előtte, akár napokig.
+  useEffect(() => {
+    const h = setInterval(async () => { if (await checkNewVersion()) await reloadWhenCalm(false) }, 60000)
+    return () => clearInterval(h)
+  }, [checkNewVersion, reloadWhenCalm])
 
   // A régi oldal futásjelzője: a gyűjtés kulcsszavai egymás után, majd várakozás a befejezésre
   useEffect(() => {
@@ -214,6 +258,7 @@ export default function Riport({ onOpenSettings }) {
       setCollectRun(started?.started_at ? started : { started_at: new Date().toISOString() })
       setNow(Date.now())
       setCollecting(true)
+      if (await checkNewVersion()) reloadWhenCalm(true)
     } catch (e) {
       if (e.status !== 409) { showToast('Nem sikerült elindítani a gyűjtést', { error: true }); return }
       // A szerver bármely profil futó gyűjtésére 409-et ad; csak a sajátunkat figyeljük.
@@ -226,6 +271,7 @@ export default function Riport({ onOpenSettings }) {
 
   const downloadPdf = async () => {
     if (!run) return
+    pdfBusy.current = true
     try {
       await saveQueue.current
       const r = await fetch(`/api/v1/runs/${run.run_id}/pdf`)
@@ -238,6 +284,8 @@ export default function Riport({ onOpenSettings }) {
       setTimeout(() => URL.revokeObjectURL(url), 1000)
     } catch {
       showToast('Nem sikerült letölteni a PDF-et', { error: true })
+    } finally {
+      pdfBusy.current = false
     }
   }
 
