@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { api } from './api'
+import { buildSimulation, playSimulation } from './terminalUtils'
 import './riport.css'
 
 const PROFILE = 'napi'
@@ -53,6 +54,7 @@ export default function Riport({ onOpenSettings }) {
   const [collectRun, setCollectRun] = useState(null)
   const [typicalSec, setTypicalSec] = useState(180)
   const [now, setNow] = useState(Date.now())
+  const [simLine, setSimLine] = useState(null)
   const [aiOpen, setAiOpen] = useState(false)
   const [openGroups, setOpenGroups] = useState(new Set())
   const [storyKeys, setStoryKeys] = useState({})
@@ -139,12 +141,27 @@ export default function Riport({ onOpenSettings }) {
     return () => clearInterval(t)
   }, [collecting])
 
+  // A régi oldal futásjelzője: a gyűjtés kulcsszavai egymás után, majd várakozás a befejezésre
+  useEffect(() => {
+    if (!collecting) { setSimLine(null); return }
+    let cancel = () => {}, alive = true
+    api.keywords.list({ active_only: true, profile: PROFILE })
+      .then(d => (Array.isArray(d) ? d : d?.items ?? []))
+      .catch(() => [])
+      .then(kws => { if (alive) cancel = playSimulation(buildSimulation(kws), setSimLine, () => {}) })
+    return () => { alive = false; cancel() }
+  }, [collecting])
+
   useEffect(() => {
     if (!collecting) return
     const h = setInterval(async () => {
       try {
         const runs = (await api.runs.list({ limit: 5, keyword_profile: PROFILE })).items ?? []
         if (!runs.some(r => r.status === 'running')) {
+          // A régi lista ne jöjjön vissza, amíg az új betöltődik (a döntés a régi futásra menne)
+          setItems([])
+          setRun(null)
+          setStoryKeys({})
           setCollecting(false)
           setCollectRun(null)
           const done = runs[0]
@@ -293,37 +310,34 @@ export default function Riport({ onOpenSettings }) {
         <div className="rp-hero">
           <div>
             <h1>{heading}</h1>
-            <div className="rp-sub">{loading || loadError ? ' ' : run ? `${allGroups.length} hír a riportban` : 'Ehhez az időszakhoz még nincs gyűjtés'}</div>
+            <div className="rp-sub">{loading || loadError ? ' ' : collecting ? ' ' : run ? `${allGroups.length} hír a riportban` : 'Ehhez az időszakhoz még nincs gyűjtés'}</div>
           </div>
           <div className="rp-hero-actions">
             <button className="rp-big" onClick={startCollect} disabled={collecting} title="Új gyűjtést indít az előző nap 9:00-tól (hétfőn péntek 9:00-tól), kb. 3 perc">{collecting ? 'Gyűjtés fut…' : 'Frissítés'}</button>
-            <button className="rp-primary" onClick={downloadPdf} disabled={!run || riport.length + dontes.length === 0 || !!loadError} title="Letölti a riportban lévő híreket ügyfélnek küldhető PDF-ként">PDF letöltése</button>
+            <button className="rp-primary" onClick={downloadPdf} disabled={collecting || !run || riport.length + dontes.length === 0 || !!loadError} title="Letölti a riportban lévő híreket ügyfélnek küldhető PDF-ként">PDF letöltése</button>
           </div>
         </div>
 
         <div className="rp-meta-row">
-          <span>{run ? `Időszak: ${periodLabel(run)}` : ''}</span>
+          <span>{run && !collecting ? `Időszak: ${periodLabel(run)}` : ''}</span>
         </div>
 
         {collecting && (() => {
-          const el = collectRun ? Math.max(0, (now - utc(collectRun.started_at)) / 1000) : 0
+          const el = collectRun ? Math.max(0, Math.floor((now - utc(collectRun.started_at)) / 1000)) : 0
           const left = Math.max(0, typicalSec - el)
-          const mmss = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`
           return (
-            <div className="rp-progress" role="status">
-              <div className="rp-progress-text">
-                <b>Új gyűjtés fut</b>
-                <span>{mmss(el)} telt el · {left > 5 ? `még kb. ${Math.ceil(left / 60)} perc` : 'mindjárt kész'}</span>
-              </div>
-              <div className="rp-progress-track"><div className="rp-progress-fill" style={{ width: `${Math.min(95, (el / typicalSec) * 100)}%` }} /></div>
-              <div className="rp-progress-note">Amíg elkészül, az előző gyűjtést látod. Utána magától frissül.</div>
-            </div>
+            <section className="run-marquee rp-run" role="status">
+              <span className="terminal-cursor" />
+              <span className="run-elapsed">{String(Math.floor(el / 60)).padStart(2, '0')}:{String(el % 60).padStart(2, '0')}</span>
+              {simLine && <div className="marquee-line" key={simLine.id}><span className={`log-${simLine.level}`}>{simLine.msg}</span></div>}
+              <div className="rp-run-note">Gyűjtés folyamatban · {left > 5 ? `még kb. ${Math.ceil(left / 60)} perc` : 'mindjárt kész'}</div>
+            </section>
           )
         })()}
 
         {loadError && <div className="rp-notice"><span>{loadError}</span><button className="rp-secondary" onClick={() => load()} title="Újra betölti a riportot">Újra</button></div>}
 
-        {loading && !items.length ? <div className="rp-empty">Betöltés…</div> : loadError ? null : !run ? (
+        {collecting ? null : loading && !items.length ? <div className="rp-empty">Betöltés…</div> : loadError ? null : !run ? (
           <div className="rp-panel"><div className="rp-empty">
             <p>Indíts egy gyűjtést, és pár perc múlva itt lesz a riport.</p>
             <p style={{ marginTop: 12 }}><button className="rp-primary" onClick={startCollect} disabled={collecting} title="Új gyűjtést indít a kiválasztott időszakra">{collecting ? 'Gyűjtés folyamatban…' : 'Gyűjtés indítása'}</button></p>
