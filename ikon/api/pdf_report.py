@@ -68,17 +68,17 @@ def generate_run_pdf(conn: sqlite3.Connection, run_id: str) -> bytes:
 
     rows = conn.execute(
         """
-        SELECT a.title, a.source, a.url, a.score,
+        SELECT a.article_id, a.title, a.source, a.url, a.score,
                a.published_date_iso, a.published_time, a.excerpt,
                a.matched_keywords, a.score_reason
         FROM articles a
         LEFT JOIN feedback f ON a.url = f.url
         WHERE a.run_id = ?
           AND (
-              (f.decision IS NULL  AND a.category = 'releváns') OR
+              (f.decision IS NULL AND a.category IN ('releváns', 'felülvizsgálandó')) OR
               f.decision = 'releváns'
           )
-        ORDER BY a.score DESC
+        ORDER BY a.score DESC, a.article_id
         """,
         (run_id,),
     ).fetchall()
@@ -92,7 +92,18 @@ def generate_run_pdf(conn: sqlite3.Connection, run_id: str) -> bytes:
             continue
         seen.add(a["url"])
         articles.append(a)
-    return _build_pdf(dict(run), articles)
+
+    # Ugyanarról a sztoriról szóló cikkek egy tételbe: a fő cikk teljesen, a többi egysoros linkként alatta
+    from ikon.sztori import run_story_keys
+    keys = run_story_keys(conn, run_id)
+    groups: dict[str, dict] = {}
+    for a in articles:
+        k = keys.get(a["article_id"], a["article_id"])
+        if k in groups:
+            groups[k]["_also"].append(a)
+        else:
+            groups[k] = {**a, "_also": []}
+    return _build_pdf(dict(run), list(groups.values()))
 
 
 def _esc(s: str | None) -> str:
@@ -272,6 +283,8 @@ def _build_pdf(run: dict, articles: list[dict]) -> bytes:
     s_title = st("title", fontName=BOLD, fontSize=11.5, leading=14.5, textColor=INK)
     s_meta = st("meta", fontSize=8.5, leading=11, textColor=MUTED)
     s_exc = st("exc", fontSize=9.5, leading=13, textColor=BODY)
+    s_also_head = st("alsoh", fontName=BOLD, fontSize=8, leading=11, textColor=MUTED)
+    s_also = st("also", fontSize=8.5, leading=11.5, textColor=BODY, leftIndent=8)
 
     buf = io.BytesIO()
     doc = BaseDocTemplate(buf, pagesize=A4, title=label, author="IKO")
@@ -299,7 +312,9 @@ def _build_pdf(run: dict, articles: list[dict]) -> bytes:
         Paragraph(window, s_run),
         Spacer(1, 12),
     ]
-    chart = _source_chart(articles, W, SANS, BOLD, BODY, INK, BLUE, BLUE_T)
+    # A forrásdiagram minden megjelenést számol, a sztorikba vont cikkekét is
+    all_articles = [x for a in articles for x in [a, *a.get("_also", [])]]
+    chart = _source_chart(all_articles, W, SANS, BOLD, BODY, INK, BLUE, BLUE_T)
     if chart is not None:
         story += [Paragraph("FORRÁSOK", st("h", fontName=BOLD, fontSize=8, leading=10, textColor=MUTED)),
                   Spacer(1, 6), chart, Spacer(1, 10)]
@@ -318,6 +333,13 @@ def _build_pdf(run: dict, articles: list[dict]) -> bytes:
         exc = _excerpt(a)
         if exc:
             block += [Spacer(1, 3), Paragraph(_esc(exc), s_exc)]
+        also = a.get("_also") or []
+        if also:
+            block += [Spacer(1, 4), Paragraph("Ugyanerről még:", s_also_head)]
+            block += [Paragraph(
+                f'{_esc(_source_name(o.get("source")))} · '
+                f'<link href="{_esc(o.get("url"))}">{_esc(o.get("title") or "Cím nélkül")}</link>', s_also)
+                for o in also]
         story += [KeepTogether(block), Spacer(1, 12)]
 
     if not articles:

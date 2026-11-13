@@ -88,3 +88,11 @@
   .rp-hero-actions > button { flex: 1; }
   .rp-zone { width: 64px; font-size: 12px; }
 }
+
+/* Futó gyűjtés: jól látható sáv eltelt idővel és várható hátralévővel */
+.rp-progress { background: var(--accent-soft); border: 1px solid var(--accent); border-radius: var(--radius); padding: 14px 16px; margin: 0 0 20px; }
+.rp-progress-text { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; color: var(--text); }
+.rp-progress-text span { color: var(--text-soft); font-variant-numeric: tabular-nums; }
+.rp-progress-track { height: 8px; border-radius: 4px; background: var(--panel); margin: 10px 0 8px; overflow: hidden; }
+.rp-progress-fill { height: 100%; border-radius: 4px; background: var(--accent); transition: width 1s linear; }
+.rp-progress-note { font-size: 13px; color: var(--muted); }

@@ -14,32 +14,15 @@ function statusOf(a) {
   return null
 }
 
-const NAME_START = /^[A-ZÁÉÍÓÖŐÚÜŰ][a-záéíóöőúüű]{2,}$/
-const NAME_NEXT = /^[A-ZÁÉÍÓÖŐÚÜŰ][a-záéíóöőúüű]{2,}/
-const SUFFIX = /(nak|nek|val|vel|ral|rel|ról|ről|tól|től|ban|ben|ba|be|ra|re|t)$/
-
-function names(t) {
-  const w = t.replace(/[„”"“:–—,!?()]/g, ' ').split(/\s+/).filter(Boolean)
-  const out = []
-  for (let i = 0; i + 1 < w.length; i++) {
-    if (NAME_START.test(w[i]) && NAME_NEXT.test(w[i + 1])) out.push(w[i] + ' ' + w[i + 1].replace(SUFFIX, ''))
-  }
-  return out
-}
-
-// Ugyanarról szóló cikkek egy sorba: azonos címkezdet vagy a címben elsőként szereplő név alapján.
-function groups(list) {
-  const g = [], key = {}
+// Ugyanarról a sztoriról szóló cikkek egy sorba, a szerver csoportosítása szerint (a PDF is ezt használja).
+function storyGroups(list, keys) {
+  const g = new Map()
   for (const a of list) {
-    const t = 't:' + a.title.toLowerCase().replace(/[^a-záéíóöőúüű0-9]/g, '').slice(0, 40)
-    const k = names(a.title)[0]
-    const hit = key[t] ?? (k !== undefined ? key[k] : undefined)
-    if (hit !== undefined) { g[hit].push(a); key[t] = hit; continue }
-    const idx = g.push([a]) - 1
-    key[t] = idx
-    if (k !== undefined) key[k] = idx
+    const k = keys[a.article_id] ?? a.article_id
+    if (!g.has(k)) g.set(k, [])
+    g.get(k).push(a)
   }
-  return g
+  return [...g.values()]
 }
 
 const utc = s => new Date(/Z|[+-]\d\d:?\d\d$/.test(s) ? s : s + 'Z')
@@ -67,8 +50,12 @@ export default function Riport({ onOpenSettings }) {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(null)
   const [collecting, setCollecting] = useState(false)
+  const [collectRun, setCollectRun] = useState(null)
+  const [typicalSec, setTypicalSec] = useState(180)
+  const [now, setNow] = useState(Date.now())
   const [aiOpen, setAiOpen] = useState(false)
   const [openGroups, setOpenGroups] = useState(new Set())
+  const [storyKeys, setStoryKeys] = useState({})
   const [toast, setToast] = useState(null)
   const toastTimer = useRef(null)
   const saveQueue = useRef(Promise.resolve())
@@ -102,7 +89,13 @@ export default function Riport({ onOpenSettings }) {
         if (!page.has_more) break
       }
       if (stale()) return
-      setCollecting(runs.some(r => r.status === 'running'))
+      const running = runs.find(r => r.status === 'running') ?? null
+      setCollecting(!!running)
+      setCollectRun(running)
+      // A várható időtartam az utolsó befejezett gyűjtések mediánja
+      const durs = runs.filter(r => r.status === 'completed' && r.completed_at)
+        .map(r => (utc(r.completed_at) - utc(r.started_at)) / 1000).filter(d => d > 0).slice(0, 5).sort((x, y) => x - y)
+      if (durs.length) setTypicalSec(durs[Math.floor(durs.length / 2)])
       if (!latest) { setRun(null); setItems([]); return }
       const fetchAll = async (category) => {
         const out = []
@@ -112,7 +105,10 @@ export default function Riport({ onOpenSettings }) {
           if (!page.has_more) return out
         }
       }
-      const lists = await Promise.all(['releváns', 'felülvizsgálandó', 'zaj'].map(fetchAll))
+      const [lists, stories] = await Promise.all([
+        Promise.all(['releváns', 'felülvizsgálandó', 'zaj'].map(fetchAll)),
+        api.runs.stories(latest.run_id).catch(() => ({ stories: {} })),
+      ])
       const seen = new Set()
       const all = []
       for (const a of lists.flat()) {
@@ -126,6 +122,7 @@ export default function Riport({ onOpenSettings }) {
       if (stale()) return
       if (saveCount.current !== savesAtStart) { load(); return }
       setRun(latest)
+      setStoryKeys(stories?.stories ?? {})
       setItems(all)
     } catch (e) {
       if (!stale()) setLoadError('Nem sikerült betölteni a riportot. Ellenőrizd a kapcsolatot, és próbáld újra.')
@@ -138,11 +135,18 @@ export default function Riport({ onOpenSettings }) {
 
   useEffect(() => {
     if (!collecting) return
+    const t = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(t)
+  }, [collecting])
+
+  useEffect(() => {
+    if (!collecting) return
     const h = setInterval(async () => {
       try {
         const runs = (await api.runs.list({ limit: 5, keyword_profile: PROFILE })).items ?? []
         if (!runs.some(r => r.status === 'running')) {
           setCollecting(false)
+          setCollectRun(null)
           const done = runs[0]
           if (done?.status === 'failed') showToast('A gyűjtés hibával leállt. Próbáld újra később.', { error: true })
           else showToast('Elkészült a friss gyűjtés')
@@ -189,14 +193,16 @@ export default function Riport({ onOpenSettings }) {
 
   const startCollect = async () => {
     try {
-      await api.runs.trigger({ triggered_by: 'ui', keyword_profile: PROFILE, window: 'munkanap' })
+      const started = await api.runs.trigger({ triggered_by: 'ui', keyword_profile: PROFILE, window: 'munkanap' })
+      setCollectRun(started?.started_at ? started : { started_at: new Date().toISOString() })
+      setNow(Date.now())
       setCollecting(true)
-      showToast('Elindult a gyűjtés, kb. 1-2 perc')
     } catch (e) {
       if (e.status !== 409) { showToast('Nem sikerült elindítani a gyűjtést', { error: true }); return }
       // A szerver bármely profil futó gyűjtésére 409-et ad; csak a sajátunkat figyeljük.
       const runs = (await api.runs.list({ limit: 5, keyword_profile: PROFILE }).catch(() => ({}))).items ?? []
-      if (runs.some(r => r.status === 'running')) { setCollecting(true); showToast('Már fut egy gyűjtés') }
+      const running = runs.find(r => r.status === 'running')
+      if (running) { setCollectRun(running); setCollecting(true); showToast('Már fut egy gyűjtés') }
       else showToast('Most egy másik gyűjtés fut a Beállításokban. Pár perc múlva próbáld újra.', { error: true })
     }
   }
@@ -229,6 +235,12 @@ export default function Riport({ onOpenSettings }) {
 
   const toRiport = a => apply([{ id: a.article_id, fb: 'releváns' }], `Bekerült a riportba: ${short(a.title)}`)
   const toKi = a => apply([{ id: a.article_id, fb: 'nem_releváns' }], `Kivetted: ${short(a.title)}`)
+  const toKiAll = g => apply(g.map(a => ({ id: a.article_id, fb: 'nem_releváns' })), g.length > 1 ? `Kivetted (${g.length} cikk): ${short(g[0].title)}` : `Kivetted: ${short(g[0].title)}`)
+
+  // Egy sztori biztos, ha bármelyik cikke biztos; a sztori fő cikke a legjobb pontszámú
+  const allGroups = storyGroups([...riport, ...dontes].sort((x, y) => (y.score ?? 0) - (x.score ?? 0) || (x.article_id < y.article_id ? -1 : 1)), storyKeys)
+  const bizosGroups = allGroups.filter(g => g.some(a => a.st === 'riport'))
+  const bizGroups = allGroups.filter(g => !g.some(a => a.st === 'riport'))
 
   const titleLink = (a, cls = 'rp-title') => (
     <a className={cls} href={a.url} target="_blank" rel="noopener noreferrer" title="Megnyitja az eredeti cikket új lapon">{a.title}</a>
@@ -239,6 +251,34 @@ export default function Riport({ onOpenSettings }) {
       <button className="rp-secondary" onClick={() => toRiport(a)} title="Visszateszi a hírt a riportba">Visszateszem</button>
     </div>
   )
+
+  const storyRow = g => {
+    const a = g[0], rest = g.slice(1), open = openGroups.has(a.article_id)
+    const sources = [...new Set(rest.map(r => r.source))]
+    const toggle = () => setOpenGroups(st => { const n = new Set(st); n.has(a.article_id) ? n.delete(a.article_id) : n.add(a.article_id); return n })
+    return (
+      <div className="rp-row rp-row-zoned" key={a.article_id}>
+        <div className="rp-body">
+          {titleLink(a)}<div className="rp-when">{whenLabel(a)}</div>
+          {a.excerpt && <div className="rp-lead">{a.excerpt}</div>}
+          {rest.length > 0 && <div className="rp-more">
+            <button className="rp-link" onClick={toggle} title="Megmutatja az ugyanerről szóló többi cikket">
+              {open ? 'Elrejtem' : `+ még ${rest.length} cikk ugyanerről: ${sources.slice(0, 4).join(', ')}${sources.length > 4 ? '…' : ''}`}
+            </button>
+            {open && <ul className="rp-sublist">{rest.map(r => (
+              <li key={r.article_id}>
+                <a href={r.url} target="_blank" rel="noopener noreferrer" title="Megnyitja az eredeti cikket új lapon">{r.title}</a>
+                <span className="rp-src">{r.source}<button className="rp-x sm" onClick={() => toKi(r)} title="Csak ezt az egy cikket veszi ki, a sztori többi cikke marad" aria-label="Kivesz">×</button></span>
+              </li>
+            ))}</ul>}
+          </div>}
+        </div>
+        <div className="rp-zones">
+          <button className="rp-zone rp-zone-x" onClick={() => toKiAll(g)} title={rest.length ? `Kiveszi ezt a hírt és az ugyanerről szóló ${rest.length} másik cikket` : 'Kiveszi a hírt, nem kerül a riportba'}><span aria-hidden="true">×</span>Kivesz</button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="rp">
@@ -253,17 +293,33 @@ export default function Riport({ onOpenSettings }) {
         <div className="rp-hero">
           <div>
             <h1>{heading}</h1>
-            <div className="rp-sub">{loading || loadError ? ' ' : run ? `${riport.length} hír a riportban` : 'Ehhez az időszakhoz még nincs gyűjtés'}</div>
+            <div className="rp-sub">{loading || loadError ? ' ' : run ? `${allGroups.length} hír a riportban` : 'Ehhez az időszakhoz még nincs gyűjtés'}</div>
           </div>
           <div className="rp-hero-actions">
-            <button className="rp-big" onClick={startCollect} disabled={collecting} title="Új gyűjtést indít az előző nap 9:00-tól (hétfőn péntek 9:00-tól), kb. 1-2 perc">{collecting ? 'Gyűjtés folyamatban…' : 'Frissítés'}</button>
-            <button className="rp-primary" onClick={downloadPdf} disabled={!run || riport.length === 0 || !!loadError} title="Letölti a riportban lévő híreket ügyfélnek küldhető PDF-ként">PDF letöltése</button>
+            <button className="rp-big" onClick={startCollect} disabled={collecting} title="Új gyűjtést indít az előző nap 9:00-tól (hétfőn péntek 9:00-tól), kb. 3 perc">{collecting ? 'Gyűjtés fut…' : 'Frissítés'}</button>
+            <button className="rp-primary" onClick={downloadPdf} disabled={!run || riport.length + dontes.length === 0 || !!loadError} title="Letölti a riportban lévő híreket ügyfélnek küldhető PDF-ként">PDF letöltése</button>
           </div>
         </div>
 
         <div className="rp-meta-row">
           <span>{run ? `Időszak: ${periodLabel(run)}` : ''}</span>
         </div>
+
+        {collecting && (() => {
+          const el = collectRun ? Math.max(0, (now - utc(collectRun.started_at)) / 1000) : 0
+          const left = Math.max(0, typicalSec - el)
+          const mmss = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`
+          return (
+            <div className="rp-progress" role="status">
+              <div className="rp-progress-text">
+                <b>Új gyűjtés fut</b>
+                <span>{mmss(el)} telt el · {left > 5 ? `még kb. ${Math.ceil(left / 60)} perc` : 'mindjárt kész'}</span>
+              </div>
+              <div className="rp-progress-track"><div className="rp-progress-fill" style={{ width: `${Math.min(95, (el / typicalSec) * 100)}%` }} /></div>
+              <div className="rp-progress-note">Amíg elkészül, az előző gyűjtést látod. Utána magától frissül.</div>
+            </div>
+          )
+        })()}
 
         {loadError && <div className="rp-notice"><span>{loadError}</span><button className="rp-secondary" onClick={() => load()} title="Újra betölti a riportot">Újra</button></div>}
 
@@ -273,21 +329,10 @@ export default function Riport({ onOpenSettings }) {
             <p style={{ marginTop: 12 }}><button className="rp-primary" onClick={startCollect} disabled={collecting} title="Új gyűjtést indít a kiválasztott időszakra">{collecting ? 'Gyűjtés folyamatban…' : 'Gyűjtés indítása'}</button></p>
           </div></div>
         ) : (<>
-          {dontes.length > 0 ? (<>
-            <p className="rp-label rp-label-warn">Döntésre vár · {dontes.length} hír</p>
-            <div className="rp-panel rp-panel-warn">{dontes.map(a => (
-              <div className="rp-row rp-row-zoned" key={a.article_id}>
-                <div className="rp-body">
-                  {titleLink(a)}<div className="rp-when">{whenLabel(a)}</div>
-                  {a.excerpt && <div className="rp-lead">{a.excerpt}</div>}
-                </div>
-                <div className="rp-zones">
-                  <button className="rp-zone rp-zone-ok" onClick={() => toRiport(a)} title="Beteszi a hírt a riportba"><span aria-hidden="true">✓</span>Riportba</button>
-                  <button className="rp-zone rp-zone-x" onClick={() => toKi(a)} title="Kihagyja a hírt, nem kerül a riportba"><span aria-hidden="true">×</span>Kihagyom</button>
-                </div>
-              </div>
-            ))}</div>
-          </>) : <p className="rp-quiet">Minden hírről döntöttél.</p>}
+          {bizGroups.length > 0 && (<>
+            <p className="rp-label rp-label-warn">Bizonytalan · {bizGroups.length} hír · bekerülnek a riportba, ha nem veszed ki</p>
+            <div className="rp-panel rp-panel-warn">{bizGroups.map(storyRow)}</div>
+          </>)}
 
           <p className="rp-quiet">
             {ai.length} hírt kiszűrtünk, mert nem a magyar médiapiacról szól{ki.length ? `, ${ki.length} hírt te vettél ki` : ''}.{' '}
@@ -302,36 +347,10 @@ export default function Riport({ onOpenSettings }) {
             </div>
           )}
 
-          <p className="rp-label">A riport tartalma · {riport.length} cikk</p>
+          <p className="rp-label">Biztos · {bizosGroups.length} hír</p>
           <div className="rp-panel">
-            {riport.length === 0 && <div className="rp-empty">Még nincs hír a riportban.</div>}
-            {groups(riport).map(g => {
-              const a = g[0], rest = g.slice(1), open = openGroups.has(a.article_id)
-              const sources = [...new Set(rest.map(r => r.source))]
-              const toggle = () => setOpenGroups(s => { const n = new Set(s); n.has(a.article_id) ? n.delete(a.article_id) : n.add(a.article_id); return n })
-              return (
-                <div className="rp-row rp-row-zoned" key={a.article_id}>
-                  <div className="rp-body">
-                    {titleLink(a)}<div className="rp-when">{whenLabel(a)}</div>
-                    {a.excerpt && <div className="rp-lead">{a.excerpt}</div>}
-                    {rest.length > 0 && <div className="rp-more">
-                      <button className="rp-link" onClick={toggle} title="Megmutatja az ugyanerről szóló többi cikket">
-                        {open ? 'Elrejtem' : `+ még ${rest.length} cikk: ${sources.slice(0, 4).join(', ')}${sources.length > 4 ? '…' : ''}`}
-                      </button>
-                      {open && <ul className="rp-sublist">{rest.map(r => (
-                        <li key={r.article_id}>
-                          <a href={r.url} target="_blank" rel="noopener noreferrer" title="Megnyitja az eredeti cikket új lapon">{r.title}</a>
-                          <span className="rp-src">{r.source}<button className="rp-x sm" onClick={() => toKi(r)} title="Kiveszi ezt a cikket a riportból" aria-label="Kivesz">×</button></span>
-                        </li>
-                      ))}</ul>}
-                    </div>}
-                  </div>
-                  <div className="rp-zones">
-                    <button className="rp-zone rp-zone-x" onClick={() => toKi(a)} title="Kiveszi ezt a hírt a riportból, a téma többi cikke marad"><span aria-hidden="true">×</span>Kivesz</button>
-                  </div>
-                </div>
-              )
-            })}
+            {bizosGroups.length === 0 && <div className="rp-empty">Még nincs biztos hír a riportban.</div>}
+            {bizosGroups.map(storyRow)}
           </div>
         </>)}
       </div>

@@ -160,6 +160,15 @@ def get_run(
     return _run_to_schema(run)
 
 
+@router.get("/runs/{run_id}/stories")
+def run_stories(run_id: str, conn: sqlite3.Connection = Depends(get_db)) -> dict:
+    """Az azonos sztorihoz tartozó cikkek: article_id → a sztori fő cikkének article_id-je."""
+    if not RunRepository(conn).get(run_id):
+        raise HTTPException(status_code=404, detail={"message": f"Run nem található: {run_id}", "code": "NOT_FOUND"})
+    from ikon.sztori import run_story_keys
+    return {"run_id": run_id, "stories": run_story_keys(conn, run_id)}
+
+
 @router.get("/runs/{run_id}/pdf")
 def download_run_pdf(
     run_id: str,

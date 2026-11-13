@@ -730,7 +730,7 @@ export default function App({ onBack }) {
             {pdfArticles.length > 0 && (
               <div className="pdf-block">
                 <div className="section-label">
-                  {revArticles.length > 0 ? 'Releváns — PDF' : 'Releváns'}
+                  Releváns
                   <span className="section-label-count">{pdfArticles.length}</span>
                   <button
                     className="btn-pdf"

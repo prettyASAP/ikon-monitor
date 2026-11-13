@@ -29,6 +29,7 @@ export const api = {
     get:     (id)       => req(`${BASE}/runs/${id}`),
     trigger: (body)     => req(`${BASE}/runs`, { method: 'POST', body }),
     summary: (id)       => req(`${BASE}/runs/${id}/summary`),
+    stories: (id)       => req(`${BASE}/runs/${id}/stories`),
   },
 
   articles: {
