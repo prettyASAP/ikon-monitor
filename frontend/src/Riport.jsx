@@ -397,12 +397,12 @@ export default function Riport({ onOpenSettings }) {
           </>)}
 
           <p className="rp-quiet">
-            {ai.length} hírt kiszűrtünk, mert nem a magyar médiapiacról szól{ki.length ? `, ${ki.length} hírt te vettél ki` : ''}.{' '}
+            {ai.length} hírt kiszűrtünk, mert nem a magyar médiapiacról szól{ki.length ? `, ${ki.length} hírt kézzel kivettek` : ''}.{' '}
             {(ai.length + ki.length) > 0 && <button className="rp-link" onClick={() => setAiOpen(o => !o)} title="Megmutatja a kiszűrt és kivett híreket, hogy egyet-egyet visszatehess">{aiOpen ? 'Elrejtem' : 'Megnézem'}</button>}
           </p>
           {aiOpen && (ai.length + ki.length) > 0 && (
             <div className="rp-panel">
-              {ki.length > 0 && <div className="rp-row" style={{ padding: '10px 16px' }}><span className="rp-label" style={{ margin: 0 }}>Te vetted ki</span></div>}
+              {ki.length > 0 && <div className="rp-row" style={{ padding: '10px 16px' }}><span className="rp-label" style={{ margin: 0 }}>Kézzel kivéve</span></div>}
               {ki.map(kiRow)}
               {ai.length > 0 && <div className="rp-row" style={{ padding: '10px 16px' }}><span className="rp-label" style={{ margin: 0 }}>Automatikusan kiszűrve</span></div>}
               {ai.map(kiRow)}
