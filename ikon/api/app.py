@@ -11,13 +11,16 @@ A lifespan hook:
 from __future__ import annotations
 
 import asyncio
+import hmac
 import logging
+import os
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import AsyncIterator, Optional
 
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
@@ -106,6 +109,20 @@ def create_app() -> FastAPI:
         if response.headers.get("content-type", "").startswith("text/html"):
             response.headers["Cache-Control"] = "no-cache"
         return response
+
+    # Csak a NOX-on át: ha a NOX_BELSO_KULCS be van állítva, minden kérésnek (felület,
+    # API, /docs) ezt a fejlécet kell hoznia; a NOX proxy.ts-e a bejelentkezés után teszi
+    # rá. A /health nyitva marad a Railway életjele miatt. Beállítás nélkül a régi,
+    # nyitott működés él (a lépcsőzetes élesítéshez).
+    _belso_kulcs = os.environ.get("NOX_BELSO_KULCS", "").strip()
+
+    @app.middleware("http")
+    async def _csak_nox(request, call_next):
+        if _belso_kulcs and request.url.path != "/health":
+            kapott = request.headers.get("x-nox-belso-kulcs", "")
+            if not hmac.compare_digest(kapott.encode(), _belso_kulcs.encode()):
+                return JSONResponse({"detail": "Csak a NOX-on keresztül érhető el."}, status_code=401)
+        return await call_next(request)
 
     # Statikus frontend serving (production: Dockerfile buildeli be)
     _dist = Path(__file__).parent.parent.parent / "frontend" / "dist"
