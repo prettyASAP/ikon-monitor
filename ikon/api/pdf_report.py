@@ -25,6 +25,9 @@ HONAP_R = ["jan.", "febr.", "márc.", "ápr.", "máj.", "jún.", "júl.", "aug."
            "okt.", "nov.", "dec."]
 NAP = ["hétfő", "kedd", "szerda", "csütörtök", "péntek", "szombat", "vasárnap"]
 KIVONAT_MAX = 220
+# Minimum betűméret és sorköz (az ügyfél kérése): legalább 12 pt, 1,5-ös sorköz mindenhol
+SZ = 12
+LD = SZ * 1.5
 
 
 def _register_fonts() -> tuple[str, str]:
@@ -180,7 +183,7 @@ def _keyword_markup(kws: list[tuple[str, int | None]]) -> str:
     return ("Keresőszó: " + " ".join(parts)) if parts else ""
 
 
-def _source_chart(articles, width, sans, bold, body, ink, bar, track, max_rows=12):
+def _source_chart(articles, width, sans, bold, body, ink, bar, track, max_rows=12, size=SZ):
     """Vízszintes sávdiagram: hány cikk jött forrásonként (rovatnév nélkül összevonva)."""
     from collections import Counter
 
@@ -193,19 +196,19 @@ def _source_chart(articles, width, sans, bold, body, ink, bar, track, max_rows=1
     if len(counts) > max_rows:
         rest = counts[max_rows - 1:]
         counts = counts[:max_rows - 1] + [(f"Egyéb ({len(rest)} forrás)", sum(v for _, v in rest))]
-    row_h, label_w = 13, 70
+    row_h, label_w = size * 1.5, 140
     h = row_h * len(counts)
     d = Drawing(width, h)
     top = max(v for _, v in counts)
-    bar_w = width - label_w - 18
+    bar_w = width - label_w - 28
     for i, (name, v) in enumerate(counts):
-        y = h - (i + 1) * row_h + 3
-        while stringWidth(name, sans, 7.5) > label_w - 6 and len(name) > 4:
+        y = h - (i + 1) * row_h + (row_h - size) / 2
+        while stringWidth(name, sans, size) > label_w - 8 and len(name) > 4:
             name = name[:-2].rstrip() + "…"
-        d.add(String(0, y + 1, name, fontName=sans, fontSize=7.5, fillColor=body))
-        d.add(Rect(label_w, y, bar_w, 6, fillColor=track, strokeColor=None, rx=3, ry=3))
-        d.add(Rect(label_w, y, max(6, bar_w * v / top), 6, fillColor=bar, strokeColor=None, rx=3, ry=3))
-        d.add(String(width, y + 1, str(v), fontName=bold, fontSize=7.5, fillColor=ink, textAnchor="end"))
+        d.add(String(0, y + 1, name, fontName=sans, fontSize=size, fillColor=body))
+        d.add(Rect(label_w, y + 2, bar_w, 7, fillColor=track, strokeColor=None, rx=3.5, ry=3.5))
+        d.add(Rect(label_w, y + 2, max(7, bar_w * v / top), 7, fillColor=bar, strokeColor=None, rx=3.5, ry=3.5))
+        d.add(String(width, y + 1, str(v), fontName=bold, fontSize=size, fillColor=ink, textAnchor="end"))
     return d
 
 
@@ -267,7 +270,7 @@ def _build_pdf(run: dict, articles: list[dict]) -> bytes:
             n = len(self._pages)
             for state in self._pages:
                 self.__dict__.update(state)
-                self.setFont(SANS, 8)
+                self.setFont(SANS, SZ)
                 self.setFillColor(FAINT)
                 self.drawString(MX, 10 * mm, footer)
                 self.drawRightString(PAGE_W - MX, 10 * mm, f"{self._pageNumber} / {n}")
@@ -277,14 +280,13 @@ def _build_pdf(run: dict, articles: list[dict]) -> bytes:
     def st(name: str, **kw) -> ParagraphStyle:
         return ParagraphStyle(name, **{"fontName": SANS, **kw})
 
-    s_label = st("label", fontName=BOLD, fontSize=26, leading=30, textColor=INK, alignment=TA_CENTER)
-    s_date = st("date", fontSize=12, leading=15, textColor=BODY, alignment=TA_CENTER)
-    s_run = st("run", fontSize=8.5, leading=11, textColor=MUTED, alignment=TA_CENTER)
-    s_title = st("title", fontName=BOLD, fontSize=11.5, leading=14.5, textColor=INK)
-    s_meta = st("meta", fontSize=8.5, leading=11, textColor=MUTED)
-    s_exc = st("exc", fontSize=9.5, leading=13, textColor=BODY)
-    s_also_head = st("alsoh", fontName=BOLD, fontSize=8, leading=11, textColor=MUTED)
-    s_also = st("also", fontSize=8.5, leading=11.5, textColor=BODY, leftIndent=8)
+    s_label = st("label", fontName=BOLD, fontSize=26, leading=39, textColor=INK, alignment=TA_CENTER)
+    s_date = st("date", fontSize=14, leading=21, textColor=BODY, alignment=TA_CENTER)
+    s_run = st("run", fontSize=SZ, leading=LD, textColor=MUTED, alignment=TA_CENTER)
+    s_title = st("title", fontName=BOLD, fontSize=14, leading=21, textColor=INK)
+    s_meta = st("meta", fontSize=SZ, leading=LD, textColor=MUTED)
+    s_exc = st("exc", fontSize=SZ, leading=LD, textColor=BODY)
+    s_also = st("also", fontSize=SZ, leading=LD, textColor=MUTED)
 
     buf = io.BytesIO()
     doc = BaseDocTemplate(buf, pagesize=A4, title=label, author="IKO")
@@ -316,7 +318,7 @@ def _build_pdf(run: dict, articles: list[dict]) -> bytes:
     all_articles = [x for a in articles for x in [a, *a.get("_also", [])]]
     chart = _source_chart(all_articles, W, SANS, BOLD, BODY, INK, BLUE, BLUE_T)
     if chart is not None:
-        story += [Paragraph("FORRÁSOK", st("h", fontName=BOLD, fontSize=8, leading=10, textColor=MUTED)),
+        story += [Paragraph("FORRÁSOK", st("h", fontName=BOLD, fontSize=SZ, leading=LD, textColor=MUTED)),
                   Spacer(1, 6), chart, Spacer(1, 10)]
     story.append(HRFlowable(width="100%", thickness=0.75, color=INK, spaceAfter=14))
 
@@ -335,11 +337,17 @@ def _build_pdf(run: dict, articles: list[dict]) -> bytes:
             block += [Spacer(1, 3), Paragraph(_esc(exc), s_exc)]
         also = a.get("_also") or []
         if also:
-            block += [Spacer(1, 4), Paragraph("Ugyanerről még:", s_also_head)]
-            block += [Paragraph(
-                f'{_esc(_source_name(o.get("source")))} · '
-                f'<link href="{_esc(o.get("url"))}">{_esc(o.get("title") or "Cím nélkül")}</link>', s_also)
-                for o in also]
+            # Csak a médium neve, ami a cikkre mutató link; egy médium egyszer (a legjobb pontszámú cikkével)
+            seen_src = {_source_name(a.get("source"))}
+            links = []
+            for o in also:
+                name = _source_name(o.get("source")) or "Forrás"
+                if name in seen_src:
+                    continue
+                seen_src.add(name)
+                links.append(f'<link href="{_esc(o.get("url"))}" color="#1B4F91"><u>{_esc(name)}</u></link>')
+            if links:
+                block += [Spacer(1, 4), Paragraph("Ugyanerről még: " + ", ".join(links), s_also)]
         story += [KeepTogether(block), Spacer(1, 12)]
 
     if not articles:
