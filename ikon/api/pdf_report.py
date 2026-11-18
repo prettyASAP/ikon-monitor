@@ -180,7 +180,7 @@ def _keyword_markup(kws: list[tuple[str, int | None]]) -> str:
     parts = [f'<font backColor="#E8F1FC" color="#1B4F91">&nbsp;{_esc(k)}&nbsp;</font>' for k in specific]
     if general:
         parts.append(_esc(", ".join(general)))
-    return ("Keresőszó: " + " ".join(parts)) if parts else ""
+    return " ".join(parts)
 
 
 def _source_chart(articles, width, sans, bold, body, ink, bar, track, max_rows=12, size=SZ):
